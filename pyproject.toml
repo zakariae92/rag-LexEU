@@ -41,6 +41,7 @@ test = { cmd = "pytest", help = "Run tests" }
 up = { cmd = "docker compose up -d --wait", help = "Start infrastructure (Qdrant, Postgres, Redis, object store)" }
 up-all = { cmd = "docker compose --profile app up -d --build --wait", help = "Start infrastructure + API container" }
 down = { cmd = "docker compose --profile app down", help = "Stop everything" }
+smoke = { cmd = "uv run --with boto3 python scripts/smoke_stack.py", help = "Write/read/cleanup against every running service" }
 
 [tool.poe.tasks.lint]
 help = "Lint, check formatting and type-check"
@@ -69,7 +70,7 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is fine in tests
+"{tests,scripts}/**" = ["S101"]  # assert is fine in tests and smoke scripts
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
