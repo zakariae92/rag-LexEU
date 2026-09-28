@@ -11,10 +11,16 @@ from qdrant_client import AsyncQdrantClient
 from rich.console import Console
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from lexeu.core.config import Settings, get_settings
+from lexeu.core.config import EmbeddingSettings, Settings, get_settings
 from lexeu.core.logging import configure_logging
 from lexeu.infra.db import SqlIndexRegistry
-from lexeu.retrieval.embeddings import CachedEmbedder, EmbeddingCache, TeiEmbedder, min_cosine
+from lexeu.retrieval.embeddings import (
+    CachedEmbedder,
+    EmbeddingCache,
+    TeiEmbedder,
+    Vectors,
+    min_cosine,
+)
 from lexeu.retrieval.index import build_index, embedding_text
 
 app = typer.Typer(help="Build and inspect the vector index.", no_args_is_help=True)
@@ -68,45 +74,59 @@ async def _embed(batch: int, parity_sample: int, skip_parity: bool) -> None:
     truststore.inject_into_ssl()
     import modal
 
-    from lexeu.jobs.modal_embed import GpuEmbedder
     from lexeu.jobs.modal_embed import app as modal_app
 
-    with modal.enable_output(), modal_app.run():
-        # modal.parameter fields become constructor kwargs at runtime
-        gpu = GpuEmbedder(model_id=cfg.model_id, revision=cfg.revision)  # type: ignore[call-arg]
+    try:
+        with modal.enable_output():
+            async with modal_app.run():
+                await _embed_remote(cfg, todo, keys, cache, batch, parity_sample, skip_parity)
+        console.print(f"[green]Done.[/] Cache now holds {len(cache)} vectors ({cfg.cache_path}).")
+    finally:
+        cache.close()
 
-        def remote(batch_texts: list[str]) -> np.ndarray:
-            raw = gpu.embed.remote(batch_texts)
-            return np.frombuffer(raw, dtype=np.float32).reshape(len(batch_texts), -1)
 
-        if not skip_parity:
-            rng = random.Random(0)  # noqa: S311 - reproducible sample, not security-related
-            sample = rng.sample(todo, min(parity_sample, len(todo)))
-            tei = TeiEmbedder(cfg.url, cfg.model_id, batch_size=cfg.batch_size)
-            try:
-                served = await tei.served_model()
-                if served != cfg.model_id:
-                    raise typer.BadParameter(f"TEI serves {served!r}, expected {cfg.model_id!r}")
-                parity = min_cosine(remote(sample), await tei.embed(sample))
-            finally:
-                await tei.aclose()
-            console.print(f"parity GPU vs TEI on {len(sample)} texts: min cosine = {parity:.5f}")
-            if parity < PARITY_MIN_COSINE:
-                cache.close()
-                console.print(
-                    f"[red]Parity below {PARITY_MIN_COSINE}: not writing to the cache.[/]"
-                )
-                raise typer.Exit(1)
+async def _embed_remote(
+    cfg: EmbeddingSettings,
+    todo: list[str],
+    keys: dict[str, str],
+    cache: EmbeddingCache,
+    batch: int,
+    parity_sample: int,
+    skip_parity: bool,
+) -> None:
+    from lexeu.jobs.modal_embed import GpuEmbedder
 
-        batches = [todo[i : i + batch] for i in range(0, len(todo), batch)]
-        for n, (batch_texts, raw) in enumerate(
-            zip(batches, gpu.embed.map(batches), strict=True), start=1
-        ):
-            vectors = np.frombuffer(raw, dtype=np.float32).reshape(len(batch_texts), -1)
-            cache.put_many({keys[t]: v for t, v in zip(batch_texts, vectors, strict=True)})
-            console.print(f"  batch {n}/{len(batches)} stored")
-    console.print(f"[green]Done.[/] Cache now holds {len(cache)} vectors ({cfg.cache_path}).")
-    cache.close()
+    # modal.parameter fields become constructor kwargs at runtime
+    gpu = GpuEmbedder(model_id=cfg.model_id, revision=cfg.revision)  # type: ignore[call-arg]
+
+    def to_vectors(raw: bytes, n: int) -> Vectors:
+        return np.frombuffer(raw, dtype=np.float32).reshape(n, -1)
+
+    if not skip_parity:
+        rng = random.Random(0)  # noqa: S311 - reproducible sample, not security-related
+        sample = rng.sample(todo, min(parity_sample, len(todo)))
+        tei = TeiEmbedder(cfg.url, cfg.model_id, batch_size=cfg.batch_size)
+        try:
+            served = await tei.served_model()
+            if served != cfg.model_id:
+                raise typer.BadParameter(f"TEI serves {served!r}, expected {cfg.model_id!r}")
+            gpu_vectors = to_vectors(await gpu.embed.remote.aio(sample), len(sample))
+            parity = min_cosine(gpu_vectors, await tei.embed(sample))
+        finally:
+            await tei.aclose()
+        console.print(f"parity GPU vs TEI on {len(sample)} texts: min cosine = {parity:.5f}")
+        if parity < PARITY_MIN_COSINE:
+            console.print(f"[red]Parity below {PARITY_MIN_COSINE}: not writing to the cache.[/]")
+            raise typer.Exit(1)
+
+    batches = [todo[i : i + batch] for i in range(0, len(todo), batch)]
+    n = 0
+    async for raw in gpu.embed.map.aio(batches):  # results come back in input order
+        batch_texts = batches[n]
+        vectors = to_vectors(raw, len(batch_texts))
+        cache.put_many({keys[t]: v for t, v in zip(batch_texts, vectors, strict=True)})
+        n += 1
+        console.print(f"  batch {n}/{len(batches)} stored")
 
 
 @app.command()

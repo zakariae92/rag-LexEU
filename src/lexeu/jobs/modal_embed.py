@@ -46,7 +46,7 @@ class GpuEmbedder:
             device="cuda",
             model_kwargs={"torch_dtype": "float32"},
         )
-        self.model.max_seq_length = 8192  # same limit as TEI (--auto-truncate at the model max)
+        self.model.max_seq_length = 4096  # = TEI max_input_length (bounded by --max-batch-tokens)
         hf_cache.commit()
 
     @modal.method()
