@@ -15,11 +15,11 @@ permissions:
 jobs:
   quality:
     name: Lint, type-check, test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # no floating major tag published
         with:
           enable-cache: true
 
@@ -40,7 +40,7 @@ jobs:
 
   stack:
     name: Docker build + stack smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: quality
     steps:
       - uses: actions/checkout@v7
