@@ -1,0 +1,35 @@
+# The legal acts rag-LexEU ingests. Adding an act = adding a block here.
+# Texts come from the EU Publications Office (Cellar), reusable with attribution
+# under Commission Decision 2011/833/EU.
+
+languages = ["en", "fr"]
+
+[[acts]]
+celex = "32016R0679"
+official_name = "Regulation (EU) 2016/679"
+short_name = { en = "GDPR", fr = "RGPD" }
+
+[[acts]]
+celex = "32024R1689"
+official_name = "Regulation (EU) 2024/1689"
+short_name = { en = "AI Act", fr = "RIA" }
+
+[[acts]]
+celex = "32022R2554"
+official_name = "Regulation (EU) 2022/2554"
+short_name = { en = "DORA", fr = "DORA" }
+
+[[acts]]
+celex = "32022L2555"
+official_name = "Directive (EU) 2022/2555"
+short_name = { en = "NIS2", fr = "NIS 2" }
+
+[[acts]]
+celex = "32022R2065"
+official_name = "Regulation (EU) 2022/2065"
+short_name = { en = "DSA", fr = "DSA" }
+
+[[acts]]
+celex = "32023R2854"
+official_name = "Regulation (EU) 2023/2854"
+short_name = { en = "Data Act", fr = "Data Act" }

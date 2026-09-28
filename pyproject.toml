@@ -7,17 +7,25 @@ requires-python = ">=3.12,<3.13"
 authors = [{ name = "Zakariae Maayzou" }]
 license = { text = "MIT" }
 dependencies = [
+    "alembic>=1.20.0",
     "asyncpg>=0.31.0",
+    "boto3>=1.43.104",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
+    "lxml>=6.1.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "qdrant-client>=1.19.1",
     "redis[hiredis]>=8.1.0",
     "sqlalchemy[asyncio]>=2.1.1",
     "structlog>=26.1.0",
+    "truststore>=0.10.4",
+    "typer>=0.27.2",
     "uvicorn[standard]>=0.54.0",
 ]
+
+[project.scripts]
+lexeu = "lexeu.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
@@ -37,10 +45,13 @@ env = { API_PORT.default = "8000" }
 
 [tool.poe.tasks]
 fmt = { cmd = "ruff format .", help = "Format code" }
-test = { cmd = "pytest", help = "Run tests" }
+test = { cmd = "pytest", help = "Run unit tests" }
+test-it = { cmd = "pytest -m integration --no-cov", help = "Run integration tests (needs `poe up`)" }
 up = { cmd = "docker compose up -d --wait", help = "Start infrastructure (Qdrant, Postgres, Redis, object store)" }
 up-all = { cmd = "docker compose --profile app up -d --build --wait", help = "Start infrastructure + API container" }
 down = { cmd = "docker compose --profile app down", help = "Stop everything" }
+migrate = { cmd = "alembic upgrade head", help = "Apply database migrations" }
+ingest = { cmd = "lexeu ingest", help = "Sync the corpus from Cellar into the registry" }
 smoke = { cmd = "uv run --with boto3 python scripts/smoke_stack.py", help = "Write/read/cleanup against every running service" }
 
 [tool.poe.tasks.lint]
@@ -79,6 +90,10 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
+module = ["asyncpg"]  # no type stubs published
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_decorators = false
 
@@ -86,7 +101,7 @@ disallow_untyped_decorators = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-ra --strict-markers --cov=lexeu --cov-report=term-missing"
+addopts = "-ra --strict-markers -m 'not integration' --cov=lexeu --cov-report=term-missing"
 markers = ["integration: needs the docker compose stack running"]
 
 [tool.coverage.run]
@@ -96,6 +111,7 @@ source = ["lexeu"]
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
+    "lxml-stubs>=0.5.1",
     "mypy>=2.3.1",
     "poethepoet>=0.48.0",
     "pre-commit>=4.6.2",
@@ -103,4 +119,5 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.9",
+    "types-boto3[s3]>=1.43.104",
 ]

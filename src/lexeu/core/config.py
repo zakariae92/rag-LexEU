@@ -41,6 +41,16 @@ class ObjectStoreSettings(BaseModel):
     bucket_raw: str = "lexeu-raw"
 
 
+class IngestionSettings(BaseModel):
+    # Official EU Publications Office API: content negotiation by CELEX number.
+    cellar_url: str = "https://publications.europa.eu/resource/celex"
+    user_agent: str = "rag-LexEU/0.1 (+https://github.com/zakariae92/rag-LexEU)"
+    timeout_s: float = 60.0
+    max_retries: int = 3
+    max_concurrency: int = 3  # be polite to a public service
+    chunk_max_chars: int = 1800
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -58,6 +68,7 @@ class Settings(BaseSettings):
     qdrant: QdrantSettings = QdrantSettings()
     redis: RedisSettings = RedisSettings()
     object_store: ObjectStoreSettings = ObjectStoreSettings()
+    ingestion: IngestionSettings = IngestionSettings()
 
 
 @lru_cache
