@@ -98,3 +98,15 @@ def test_does_not_resolve_external_entities() -> None:
     )
     with pytest.raises(ParseError):  # parses safely, finds no articles
         parse_act(xxe, "X", "en")
+
+
+def test_exponents_and_ordinals_in_superscript() -> None:
+    xhtml = FIXTURE.read_bytes().replace(
+        b"Member States may maintain more specific provisions.",
+        b'Models above 10<span class="oj-super">25</span> FLOPs, see Regulation (EC) '
+        b'N<span class="oj-super">o</span> 45/2001.',
+    )
+    art6 = next(p for p in parse_act(xhtml, "32016R0679", "en").provisions if p.eli_id == "art_6")
+    assert art6.units[1].blocks[0].text == (
+        "2. Models above 10^25 FLOPs, see Regulation (EC) No 45/2001."
+    )

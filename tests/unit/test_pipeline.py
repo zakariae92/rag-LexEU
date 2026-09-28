@@ -33,7 +33,7 @@ async def test_first_sync_creates_every_document(h: Harness) -> None:
     assert len(h.store.objects) == 2
     meta, chunks = h.registry.docs[("32016R0679", "en")]
     assert meta.raw_object_key == f"raw/32016R0679/en/{meta.content_sha256}.xhtml"
-    assert meta.pipeline_version == "parser=1;max_chars=1800"
+    assert meta.pipeline_version == "parser=2;max_chars=1800"
     assert len(chunks) == 6
 
 

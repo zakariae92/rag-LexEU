@@ -16,7 +16,7 @@ from lxml import etree
 from lexeu.ingestion.corpus import Lang
 from lexeu.ingestion.models import Block, ParsedAct, Provision, Unit
 
-PARSER_VERSION = "1"  # bump when output changes: forces a re-parse of unchanged documents
+PARSER_VERSION = "2"  # bump when output changes: forces a re-parse of unchanged documents
 
 _RE_ARTICLE = re.compile(r"^art_\w+$")
 _RE_RECITAL = re.compile(r"^rct_(\d+)$")
@@ -187,13 +187,23 @@ def _labelled(cells: list[etree._Element]) -> tuple[str, etree._Element] | None:
 
 
 def _text(el: etree._Element) -> str:
-    """Visible text, without footnote markers, whitespace normalised."""
+    """Visible text, without footnote markers, whitespace normalised.
+
+    `oj-super` marks footnote markers (dropped), ordinals ("No", "1er": kept inline) and
+    exponents: "10<sup>25</sup>" must read "10^25", not "1025".
+    """
     parts: list[str] = []
 
     def walk(node: etree._Element) -> None:
-        if "oj-note-tag" not in _classes(node):
+        classes = _classes(node)
+        if "oj-note-tag" not in classes:
             if node.text:
-                parts.append(node.text)
+                is_exponent = (
+                    "oj-super" in classes
+                    and node.text.strip().isdigit()
+                    and "".join(parts)[-1:].isdigit()
+                )
+                parts.append(f"^{node.text.strip()}" if is_exponent else node.text)
             for child in node:
                 walk(child)
         if node is not el and node.tail:
