@@ -1,4 +1,4 @@
-"""Command line: `lexeu ingest`, `lexeu corpus status`, `lexeu corpus show`."""
+"""Command line: `lexeu ingest | corpus | index | eval`."""
 
 import asyncio
 from typing import Annotated
@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from lexeu.commands import evaluate as evaluate_cmd
+from lexeu.commands import index as index_cmd
 from lexeu.core.config import get_settings
 from lexeu.core.logging import configure_logging
 from lexeu.infra.db import SqlRegistry
@@ -19,6 +21,8 @@ from lexeu.ingestion.pipeline import sync
 app = typer.Typer(help="rag-LexEU command line.", no_args_is_help=True)
 corpus_app = typer.Typer(help="Inspect the ingested corpus.", no_args_is_help=True)
 app.add_typer(corpus_app, name="corpus")
+app.add_typer(index_cmd.app, name="index")
+app.add_typer(evaluate_cmd.app, name="eval")
 console = Console()
 
 

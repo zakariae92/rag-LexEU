@@ -1,0 +1,1038 @@
+# rag-LexEU golden set v1
+#
+# Each item: a question, the provisions that answer it, and a short reference answer.
+# `expected` uses provision keys "{celex}:{eli_id}[:{unit}]":
+#   - "32016R0679:art_33:p1"  -> paragraph 1 of Article 33 GDPR
+#   - "32016R0679:art_4"      -> any part of Article 4 (matches every unit of the article)
+# A retrieved chunk is relevant if its provision_key equals or starts with an expected key.
+#
+# Categories: lookup | definition | obligation | temporal | cross_regulation | unanswerable | false_premise
+# `answerable: false` -> the corpus does not contain the answer; the system must say so (M4).
+# `status: draft` -> written against the source text, awaiting human review (`lexeu eval review`).
+
+version: 1
+items:
+  # ------------------------------------------------------------------ GDPR (32016R0679)
+  - id: gdpr-001
+    lang: en
+    category: lookup
+    question: What are the lawful bases for processing personal data under the GDPR?
+    expected: ["32016R0679:art_6:p1"]
+    reference: Consent, performance of a contract, legal obligation, vital interests, public interest or official authority, and legitimate interests (Art. 6(1)(a)-(f)).
+  - id: gdpr-002
+    lang: en
+    category: lookup
+    question: What principles must the processing of personal data comply with?
+    expected: ["32016R0679:art_5"]
+    reference: Lawfulness, fairness and transparency; purpose limitation; data minimisation; accuracy; storage limitation; integrity and confidentiality; plus accountability of the controller (Art. 5).
+  - id: gdpr-003
+    lang: en
+    category: obligation
+    question: Within how many hours must a controller notify a personal data breach to the supervisory authority?
+    expected: ["32016R0679:art_33:p1"]
+    reference: Without undue delay and, where feasible, within 72 hours of becoming aware of it, unless the breach is unlikely to result in a risk; late notifications must give reasons (Art. 33(1)).
+  - id: gdpr-004
+    lang: en
+    category: obligation
+    question: When does a controller have to inform the data subjects themselves about a personal data breach?
+    expected: ["32016R0679:art_34:p1"]
+    reference: When the breach is likely to result in a high risk to their rights and freedoms, without undue delay (Art. 34(1)).
+  - id: gdpr-005
+    lang: en
+    category: obligation
+    question: In which cases is a data protection impact assessment mandatory?
+    expected: ["32016R0679:art_35:p1", "32016R0679:art_35:p3"]
+    reference: When processing is likely to result in a high risk, in particular systematic and extensive profiling with significant effects, large-scale processing of special categories or criminal data, and large-scale systematic monitoring of public areas (Art. 35(1) and (3)).
+  - id: gdpr-006
+    lang: en
+    category: obligation
+    question: When must an organisation designate a data protection officer?
+    expected: ["32016R0679:art_37:p1"]
+    reference: When processing is carried out by a public authority, when core activities involve regular and systematic monitoring on a large scale, or large-scale processing of special categories or criminal data (Art. 37(1)).
+  - id: gdpr-007
+    lang: en
+    category: lookup
+    question: What are the tasks of a data protection officer?
+    expected: ["32016R0679:art_39:p1"]
+    reference: Inform and advise, monitor compliance, advise on DPIAs, cooperate with and act as contact point for the supervisory authority (Art. 39(1)).
+  - id: gdpr-008
+    lang: en
+    category: obligation
+    question: Do companies with fewer than 250 employees have to keep records of processing activities?
+    expected: ["32016R0679:art_30:p5"]
+    reference: Not, unless the processing is likely to result in a risk, is not occasional, or includes special categories or criminal conviction data (Art. 30(5)).
+  - id: gdpr-009
+    lang: en
+    category: lookup
+    question: What is the maximum administrative fine under the GDPR?
+    expected: ["32016R0679:art_83:p5"]
+    reference: Up to EUR 20 000 000 or 4 % of total worldwide annual turnover, whichever is higher (Art. 83(5)).
+  - id: gdpr-010
+    lang: en
+    category: lookup
+    question: Which GDPR infringements are subject to fines of up to 10 million euros or 2 % of turnover?
+    expected: ["32016R0679:art_83:p4"]
+    reference: Infringements of controller and processor obligations (Articles 8, 11, 25-39, 42, 43), certification body and monitoring body obligations (Art. 83(4)).
+  - id: gdpr-011
+    lang: en
+    category: obligation
+    question: How long does a controller have to respond to a data subject request?
+    expected: ["32016R0679:art_12:p3"]
+    reference: Without undue delay and within one month of receipt, extendable by two further months where necessary, with the data subject informed of the extension within the first month (Art. 12(3)).
+  - id: gdpr-012
+    lang: en
+    category: lookup
+    question: What information can a data subject obtain through the right of access?
+    expected: ["32016R0679:art_15:p1"]
+    reference: Confirmation of processing and access to the data, plus purposes, categories, recipients, retention period, rights, source and existence of automated decision-making (Art. 15(1)).
+  - id: gdpr-013
+    lang: en
+    category: lookup
+    question: On what grounds can a data subject ask for their personal data to be erased?
+    expected: ["32016R0679:art_17:p1"]
+    reference: Data no longer necessary, consent withdrawn, successful objection, unlawful processing, legal obligation to erase, or data collected from a child for information society services (Art. 17(1)).
+  - id: gdpr-014
+    lang: en
+    category: lookup
+    question: What does the right to data portability allow a data subject to do?
+    expected: ["32016R0679:art_20:p1"]
+    reference: Receive their data in a structured, commonly used and machine-readable format and transmit it to another controller, where processing is based on consent or contract and carried out by automated means (Art. 20(1)).
+  - id: gdpr-015
+    lang: en
+    category: lookup
+    question: Can a data subject object to the processing of their data for direct marketing?
+    expected: ["32016R0679:art_21:p2"]
+    reference: Yes, at any time, including profiling related to direct marketing; the data must then no longer be processed for that purpose (Art. 21(2)-(3)).
+  - id: gdpr-016
+    lang: en
+    category: lookup
+    question: What rules apply to decisions based solely on automated processing, including profiling?
+    expected: ["32016R0679:art_22"]
+    reference: The data subject has the right not to be subject to such decisions producing legal or similarly significant effects, subject to exceptions (contract, Union/Member State law, explicit consent) with safeguards (Art. 22).
+  - id: gdpr-017
+    lang: en
+    category: obligation
+    question: What must a contract between a controller and a processor contain?
+    expected: ["32016R0679:art_28:p3"]
+    reference: Subject-matter, duration, nature and purpose, data types and categories of data subjects, and processor duties such as documented instructions, confidentiality, security, sub-processor rules, assistance, deletion or return, and audits (Art. 28(3)).
+  - id: gdpr-018
+    lang: en
+    category: lookup
+    question: Does the GDPR apply to a company established outside the EU that offers goods to people in the EU?
+    expected: ["32016R0679:art_3:p2"]
+    reference: Yes, where it offers goods or services to data subjects in the Union or monitors their behaviour in the Union (Art. 3(2)).
+  - id: gdpr-019
+    lang: en
+    category: obligation
+    question: When must a controller not established in the EU designate a representative in the Union?
+    expected: ["32016R0679:art_27:p1"]
+    reference: Where Article 3(2) applies, it must designate a representative in the Union in writing, subject to exceptions (Art. 27(1)-(2)).
+  - id: gdpr-020
+    lang: en
+    category: lookup
+    question: Without an adequacy decision, which safeguards allow transfers of personal data to third countries?
+    expected: ["32016R0679:art_46:p2"]
+    reference: Legally binding instruments between public authorities, binding corporate rules, standard data protection clauses, approved codes of conduct or certification mechanisms (Art. 46(2)).
+  - id: gdpr-021
+    lang: en
+    category: obligation
+    question: What security measures does the GDPR require for processing personal data?
+    expected: ["32016R0679:art_32:p1"]
+    reference: Appropriate technical and organisational measures such as pseudonymisation and encryption, confidentiality, integrity, availability and resilience, timely restoration, and regular testing (Art. 32(1)).
+  - id: gdpr-022
+    lang: en
+    category: lookup
+    question: What is data protection by design and by default?
+    expected: ["32016R0679:art_25"]
+    reference: Implementing appropriate measures to integrate data protection principles into processing, and ensuring that by default only data necessary for each purpose are processed (Art. 25).
+  - id: gdpr-023
+    lang: en
+    category: obligation
+    question: At what age can a child consent alone to the processing of their data by an information society service?
+    expected: ["32016R0679:art_8:p1"]
+    reference: 16 years; below that, consent must be given or authorised by the holder of parental responsibility. Member States may lower the age, but not below 13 (Art. 8(1)).
+  - id: gdpr-024
+    lang: en
+    category: lookup
+    question: Is the processing of health data allowed under the GDPR?
+    expected: ["32016R0679:art_9:p1", "32016R0679:art_9:p2"]
+    reference: Processing of special categories, including health data, is prohibited unless an exception in Art. 9(2) applies, such as explicit consent, employment law, vital interests, or health care purposes (Art. 9).
+  - id: gdpr-025
+    lang: en
+    category: lookup
+    question: What are the conditions for valid consent under the GDPR?
+    expected: ["32016R0679:art_7"]
+    reference: The controller must be able to demonstrate consent; requests must be distinguishable, intelligible and clear; consent can be withdrawn at any time; freely given (Art. 7).
+  - id: gdpr-026
+    lang: en
+    category: definition
+    question: How does the GDPR define personal data?
+    expected: ["32016R0679:art_4"]
+    reference: Any information relating to an identified or identifiable natural person (the data subject) (Art. 4(1)).
+  - id: gdpr-027
+    lang: en
+    category: definition
+    question: What is pseudonymisation according to the GDPR?
+    expected: ["32016R0679:art_4"]
+    reference: Processing such that data can no longer be attributed to a specific data subject without additional information kept separately and protected (Art. 4(5)).
+  - id: gdpr-028
+    lang: en
+    category: definition
+    question: What counts as a personal data breach?
+    expected: ["32016R0679:art_4"]
+    reference: A breach of security leading to accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to, personal data (Art. 4(12)).
+  - id: gdpr-029
+    lang: fr
+    category: obligation
+    question: Dans quel délai faut-il notifier une violation de données à caractère personnel à l'autorité de contrôle ?
+    expected: ["32016R0679:art_33:p1"]
+    reference: Dans les meilleurs délais et, si possible, 72 heures au plus tard après en avoir pris connaissance (art. 33, par. 1).
+  - id: gdpr-030
+    lang: fr
+    category: lookup
+    question: Quel est le montant maximal des amendes administratives prévues par le RGPD ?
+    expected: ["32016R0679:art_83:p5"]
+    reference: Jusqu'à 20 000 000 EUR ou 4 % du chiffre d'affaires annuel mondial total, le montant le plus élevé étant retenu (art. 83, par. 5).
+  - id: gdpr-031
+    lang: fr
+    category: obligation
+    question: À partir de quel âge un enfant peut-il consentir seul au traitement de ses données par un service de la société de l'information ?
+    expected: ["32016R0679:art_8:p1"]
+    reference: 16 ans ; les États membres peuvent abaisser cet âge sans descendre en dessous de 13 ans (art. 8, par. 1).
+  - id: gdpr-032
+    lang: fr
+    category: lookup
+    question: Quelles sont les conditions qui rendent un traitement de données licite ?
+    expected: ["32016R0679:art_6:p1"]
+    reference: Consentement, exécution d'un contrat, obligation légale, intérêts vitaux, mission d'intérêt public, intérêts légitimes (art. 6, par. 1).
+  - id: gdpr-033
+    lang: fr
+    category: obligation
+    question: Quand la désignation d'un délégué à la protection des données est-elle obligatoire ?
+    expected: ["32016R0679:art_37:p1"]
+    reference: Autorité publique, suivi régulier et systématique à grande échelle, ou traitement à grande échelle de données sensibles ou pénales (art. 37, par. 1).
+  - id: gdpr-034
+    lang: fr
+    category: definition
+    question: Comment le RGPD définit-il le profilage ?
+    expected: ["32016R0679:art_4"]
+    reference: Tout traitement automatisé consistant à utiliser des données personnelles pour évaluer certains aspects personnels d'une personne physique (art. 4, point 4).
+  - id: gdpr-035
+    lang: fr
+    category: lookup
+    question: Dans quels cas une personne peut-elle obtenir l'effacement de ses données ?
+    expected: ["32016R0679:art_17:p1"]
+    reference: Données plus nécessaires, retrait du consentement, opposition, traitement illicite, obligation légale, données d'enfants collectées pour des services en ligne (art. 17, par. 1).
+
+  # ------------------------------------------------------------------ AI Act (32024R1689)
+  - id: ai-001
+    lang: en
+    category: lookup
+    question: Which AI practices are prohibited under the AI Act?
+    expected: ["32024R1689:art_5:p1"]
+    reference: Manipulative or deceptive techniques, exploiting vulnerabilities, social scoring, predicting criminal offences solely from profiling, untargeted scraping of facial images, emotion recognition at work and school, biometric categorisation of sensitive traits, and real-time remote biometric identification in public spaces for law enforcement (with exceptions) (Art. 5(1)).
+  - id: ai-002
+    lang: en
+    category: lookup
+    question: When is an AI system considered high-risk?
+    expected: ["32024R1689:art_6:p1", "32024R1689:art_6:p2"]
+    reference: When it is a safety component of, or itself, a product covered by Annex I legislation requiring third-party conformity assessment, or when it is listed in Annex III (Art. 6(1)-(2)).
+  - id: ai-003
+    lang: en
+    category: lookup
+    question: Which areas are listed as high-risk in Annex III of the AI Act?
+    expected: ["32024R1689:anx_III"]
+    reference: Biometrics, critical infrastructure, education, employment, access to essential services, law enforcement, migration and border control, administration of justice and democratic processes (Annex III).
+  - id: ai-004
+    lang: en
+    category: obligation
+    question: What are the obligations of providers of high-risk AI systems?
+    expected: ["32024R1689:art_16"]
+    reference: Ensure compliance with Section 2 requirements, indicate their name and address, have a quality management system, keep documentation and logs, conformity assessment, EU declaration of conformity, CE marking, registration, corrective actions (Art. 16).
+  - id: ai-005
+    lang: en
+    category: obligation
+    question: What must deployers of high-risk AI systems do?
+    expected: ["32024R1689:art_26"]
+    reference: Use systems according to instructions, assign human oversight, ensure relevant input data, monitor operation, keep logs, inform workers and affected persons (Art. 26).
+  - id: ai-006
+    lang: en
+    category: obligation
+    question: Who must carry out a fundamental rights impact assessment before deploying a high-risk AI system?
+    expected: ["32024R1689:art_27:p1"]
+    reference: Deployers that are bodies governed by public law or private entities providing public services, and deployers of certain Annex III systems (creditworthiness, life and health insurance pricing) (Art. 27(1)).
+  - id: ai-007
+    lang: en
+    category: obligation
+    question: What transparency obligations apply to AI systems that interact directly with people, such as chatbots?
+    expected: ["32024R1689:art_50:p1"]
+    reference: Providers must design them so that people are informed they are interacting with an AI system, unless obvious from the context (Art. 50(1)).
+  - id: ai-008
+    lang: en
+    category: obligation
+    question: Must AI-generated synthetic content be marked as artificially generated?
+    expected: ["32024R1689:art_50:p2"]
+    reference: Yes, providers of systems generating synthetic audio, image, video or text must ensure outputs are marked in a machine-readable format and detectable as artificially generated (Art. 50(2)).
+  - id: ai-009
+    lang: en
+    category: obligation
+    question: What are the obligations of providers of general-purpose AI models?
+    expected: ["32024R1689:art_53:p1"]
+    reference: Technical documentation, information for downstream providers, a copyright compliance policy, and a public summary of training content (Art. 53(1)).
+  - id: ai-010
+    lang: en
+    category: lookup
+    question: When is a general-purpose AI model presumed to have high-impact capabilities?
+    expected: ["32024R1689:art_51:p2"]
+    reference: When the cumulative computation used for training exceeds 10^25 floating point operations (Art. 51(2)).
+  - id: ai-011
+    lang: en
+    category: obligation
+    question: What additional obligations apply to providers of general-purpose AI models with systemic risk?
+    expected: ["32024R1689:art_55:p1"]
+    reference: Model evaluation including adversarial testing, assessing and mitigating systemic risks, reporting serious incidents, and adequate cybersecurity (Art. 55(1)).
+  - id: ai-012
+    lang: en
+    category: lookup
+    question: What are the fines for engaging in prohibited AI practices?
+    expected: ["32024R1689:art_99:p3"]
+    reference: Up to EUR 35 000 000 or 7 % of total worldwide annual turnover, whichever is higher (Art. 99(3)).
+  - id: ai-013
+    lang: en
+    category: lookup
+    question: What fines apply for non-compliance with operator obligations other than the prohibited practices?
+    expected: ["32024R1689:art_99:p4"]
+    reference: Up to EUR 15 000 000 or 3 % of total worldwide annual turnover, whichever is higher (Art. 99(4)).
+  - id: ai-014
+    lang: en
+    category: obligation
+    question: What does the AI Act require regarding AI literacy?
+    expected: ["32024R1689:art_4"]
+    reference: Providers and deployers must take measures to ensure a sufficient level of AI literacy of their staff and others operating AI systems on their behalf (Art. 4).
+  - id: ai-015
+    lang: en
+    category: obligation
+    question: What must the risk management system for high-risk AI systems involve?
+    expected: ["32024R1689:art_9"]
+    reference: "A continuous iterative process across the lifecycle: identifying and estimating risks, evaluating risks from post-market data, and adopting risk management measures, with testing (Art. 9)."
+  - id: ai-016
+    lang: en
+    category: obligation
+    question: What does human oversight of high-risk AI systems require?
+    expected: ["32024R1689:art_14"]
+    reference: Systems must be designed so natural persons can effectively oversee them, understand their capacities and limitations, avoid automation bias, and override or stop them (Art. 14).
+  - id: ai-017
+    lang: en
+    category: obligation
+    question: Do high-risk AI systems have to keep logs?
+    expected: ["32024R1689:art_12"]
+    reference: Yes, they must technically allow automatic recording of events over their lifetime (Art. 12(1)).
+  - id: ai-018
+    lang: en
+    category: obligation
+    question: Must providers report serious incidents involving high-risk AI systems?
+    expected: ["32024R1689:art_73:p1"]
+    reference: Yes, to the market surveillance authorities of the Member States where the incident occurred (Art. 73(1)).
+  - id: ai-019
+    lang: en
+    category: lookup
+    question: Who must establish AI regulatory sandboxes?
+    expected: ["32024R1689:art_57:p1"]
+    reference: Member States must ensure their competent authorities establish at least one AI regulatory sandbox at national level (Art. 57(1)).
+  - id: ai-020
+    lang: en
+    category: obligation
+    question: What must the quality management system of a high-risk AI provider cover?
+    expected: ["32024R1689:art_17:p1"]
+    reference: Regulatory compliance strategy, design and development procedures, testing and validation, data management, risk management, post-market monitoring, incident reporting, communication, record keeping, resources and accountability (Art. 17(1)).
+  - id: ai-021
+    lang: en
+    category: definition
+    question: How does the AI Act define an AI system?
+    expected: ["32024R1689:art_3"]
+    reference: A machine-based system designed to operate with varying levels of autonomy, that may exhibit adaptiveness and infers from input how to generate outputs such as predictions, content, recommendations or decisions (Art. 3(1)).
+  - id: ai-022
+    lang: en
+    category: definition
+    question: Who is a deployer under the AI Act?
+    expected: ["32024R1689:art_3"]
+    reference: A person or body using an AI system under its authority, except for personal non-professional activity (Art. 3(4)).
+  - id: ai-023
+    lang: en
+    category: lookup
+    question: What is the AI Office?
+    expected: ["32024R1689:art_64:p1", "32024R1689:art_3"]
+    reference: The Commission's function for developing Union expertise and capabilities in AI and implementing the Regulation (Art. 3(47), Art. 64(1)).
+  - id: ai-024
+    lang: en
+    category: lookup
+    question: What is the EU database for high-risk AI systems?
+    expected: ["32024R1689:art_71"]
+    reference: A database set up and maintained by the Commission, with the Member States, containing registration information on high-risk AI systems (Art. 71).
+  - id: ai-025
+    lang: fr
+    category: lookup
+    question: Quelles pratiques en matière d'intelligence artificielle sont interdites par le règlement sur l'IA ?
+    expected: ["32024R1689:art_5:p1"]
+    reference: Techniques manipulatrices, exploitation des vulnérabilités, notation sociale, reconnaissance des émotions au travail et à l'école, catégorisation biométrique sensible, etc. (art. 5, par. 1).
+  - id: ai-026
+    lang: fr
+    category: lookup
+    question: Quel est le montant maximal de l'amende en cas de pratique d'IA interdite ?
+    expected: ["32024R1689:art_99:p3"]
+    reference: Jusqu'à 35 000 000 EUR ou 7 % du chiffre d'affaires annuel mondial total (art. 99, par. 3).
+  - id: ai-027
+    lang: fr
+    category: obligation
+    question: Quelles obligations de transparence s'appliquent aux systèmes d'IA qui interagissent avec des personnes physiques ?
+    expected: ["32024R1689:art_50:p1"]
+    reference: Les personnes doivent être informées qu'elles interagissent avec un système d'IA, sauf si cela est évident (art. 50, par. 1).
+  - id: ai-028
+    lang: fr
+    category: obligation
+    question: Quelles sont les obligations des fournisseurs de modèles d'IA à usage général ?
+    expected: ["32024R1689:art_53:p1"]
+    reference: Documentation technique, informations aux fournisseurs en aval, politique de respect du droit d'auteur, résumé public des contenus d'entraînement (art. 53, par. 1).
+  - id: ai-029
+    lang: fr
+    category: lookup
+    question: Quels domaines l'annexe III classe-t-elle parmi les systèmes d'IA à haut risque ?
+    expected: ["32024R1689:anx_III"]
+    reference: Biométrie, infrastructures critiques, éducation, emploi, services essentiels, répression, migration, justice et processus démocratiques (annexe III).
+  - id: ai-030
+    lang: fr
+    category: obligation
+    question: Qu'exige le contrôle humain des systèmes d'IA à haut risque ?
+    expected: ["32024R1689:art_14"]
+    reference: Une surveillance effective par des personnes physiques, capables de comprendre, interpréter, ne pas utiliser, annuler ou interrompre le système (art. 14).
+
+  # ------------------------------------------------------------------ DORA (32022R2554)
+  - id: dora-001
+    lang: en
+    category: lookup
+    question: Which financial entities fall within the scope of DORA?
+    expected: ["32022R2554:art_2:p1"]
+    reference: Credit, payment and e-money institutions, investment firms, crypto-asset service providers, trading venues, insurers and reinsurers, pension institutions, rating agencies, ICT third-party service providers, and others listed in Art. 2(1).
+  - id: dora-002
+    lang: en
+    category: obligation
+    question: What is the management body responsible for under DORA?
+    expected: ["32022R2554:art_5:p2"]
+    reference: Defining, approving, overseeing and being responsible for all ICT risk management arrangements, including strategy, policies, budget and third-party risk (Art. 5(2)).
+  - id: dora-003
+    lang: en
+    category: obligation
+    question: What must a financial entity's ICT risk management framework include?
+    expected: ["32022R2554:art_6"]
+    reference: A sound, comprehensive and documented framework with strategies, policies, procedures, ICT protocols and tools, reviewed at least yearly, and a digital operational resilience strategy (Art. 6).
+  - id: dora-004
+    lang: en
+    category: obligation
+    question: How must financial entities classify ICT-related incidents?
+    expected: ["32022R2554:art_18:p1"]
+    reference: By impact, based on criteria such as clients affected, duration, geographical spread, data losses, criticality of services affected and economic impact (Art. 18(1)).
+  - id: dora-005
+    lang: en
+    category: obligation
+    question: Must financial entities report major ICT-related incidents, and to whom?
+    expected: ["32022R2554:art_19:p1"]
+    reference: Yes, to the relevant competent authority referred to in Article 46 (Art. 19(1)).
+  - id: dora-006
+    lang: en
+    category: obligation
+    question: What contractual provisions must ICT services agreements include under DORA?
+    expected: ["32022R2554:art_30:p2"]
+    reference: Description of services, locations of processing, data protection provisions, access and return of data, service levels, assistance with incidents, cooperation with authorities, termination rights and more (Art. 30(2)).
+  - id: dora-007
+    lang: en
+    category: obligation
+    question: What is the register of information that financial entities must maintain?
+    expected: ["32022R2554:art_28:p3"]
+    reference: A register of all contractual arrangements on the use of ICT services provided by ICT third-party service providers, at entity, sub-consolidated and consolidated levels (Art. 28(3)).
+  - id: dora-008
+    lang: en
+    category: obligation
+    question: Which financial entities must carry out threat-led penetration testing?
+    expected: ["32022R2554:art_26:p1"]
+    reference: Entities identified by competent authorities, other than those in Article 16(1) and microenterprises, at least every three years (Art. 26(1)).
+  - id: dora-009
+    lang: en
+    category: lookup
+    question: How are critical ICT third-party service providers designated?
+    expected: ["32022R2554:art_31:p1"]
+    reference: By the ESAs through the Joint Committee, upon recommendation of the Oversight Forum, which also appoint a Lead Overseer (Art. 31(1)).
+  - id: dora-010
+    lang: en
+    category: lookup
+    question: Can financial entities share cyber threat information with each other?
+    expected: ["32022R2554:art_45:p1"]
+    reference: Yes, within trusted communities, to enhance digital operational resilience, under information-sharing arrangements (Art. 45(1)).
+  - id: dora-011
+    lang: en
+    category: obligation
+    question: What backup and restoration policies must financial entities have?
+    expected: ["32022R2554:art_12:p1"]
+    reference: Backup policies and procedures specifying scope and frequency, and restoration and recovery methods (Art. 12(1)).
+  - id: dora-012
+    lang: en
+    category: obligation
+    question: What does DORA require for digital operational resilience testing?
+    expected: ["32022R2554:art_24:p1"]
+    reference: A sound and comprehensive testing programme as an integral part of the ICT risk-management framework (Art. 24(1)).
+  - id: dora-013
+    lang: en
+    category: obligation
+    question: What are the exact deadlines for the initial notification of a major ICT-related incident under DORA?
+    expected: ["32022R2554:art_19:p4", "32022R2554:art_20"]
+    reference: The regulation does not fix them; they are laid down in regulatory technical standards developed by the ESAs under Article 20 (Art. 19(4), Art. 20).
+    notes: "Tricky: the answer must say that deadlines are delegated, not invent hours."
+  - id: dora-014
+    lang: fr
+    category: lookup
+    question: Quelles entités financières relèvent du champ d'application de DORA ?
+    expected: ["32022R2554:art_2:p1"]
+    reference: Établissements de crédit, de paiement, de monnaie électronique, entreprises d'investissement, prestataires de crypto-actifs, assureurs, etc. (art. 2, par. 1).
+  - id: dora-015
+    lang: fr
+    category: obligation
+    question: Quelles clauses doivent figurer dans les contrats de services TIC selon DORA ?
+    expected: ["32022R2554:art_30:p2"]
+    reference: Description des services, lieux de traitement, protection des données, niveaux de service, assistance en cas d'incident, droits de résiliation, etc. (art. 30, par. 2).
+  - id: dora-016
+    lang: fr
+    category: obligation
+    question: Les entités financières doivent-elles notifier les incidents majeurs liés aux TIC ?
+    expected: ["32022R2554:art_19:p1"]
+    reference: Oui, à l'autorité compétente visée à l'article 46 (art. 19, par. 1).
+
+  # ------------------------------------------------------------------ NIS2 (32022L2555)
+  - id: nis2-001
+    lang: en
+    category: lookup
+    question: Which entities fall within the scope of NIS2?
+    expected: ["32022L2555:art_2:p1"]
+    reference: Public or private entities of a type in Annex I or II that qualify as medium-sized enterprises or exceed the thresholds, providing services or carrying out activities in the Union (Art. 2(1)).
+  - id: nis2-002
+    lang: en
+    category: lookup
+    question: Which entities are considered essential entities under NIS2?
+    expected: ["32022L2555:art_3:p1"]
+    reference: Annex I entities exceeding the medium-sized thresholds, qualified trust service providers, TLD registries and DNS providers, certain public administrations, and others listed in Art. 3(1).
+  - id: nis2-003
+    lang: en
+    category: obligation
+    question: What cybersecurity risk-management measures must essential and important entities take?
+    expected: ["32022L2555:art_21:p2", "32022L2555:art_21:p1"]
+    reference: An all-hazards approach including risk analysis policies, incident handling, business continuity, supply chain security, secure development, effectiveness assessment, cyber hygiene and training, cryptography, HR security, and MFA (Art. 21(2)).
+  - id: nis2-004
+    lang: en
+    category: obligation
+    question: What are the incident reporting deadlines under NIS2?
+    expected: ["32022L2555:art_23:p4"]
+    reference: Early warning within 24 hours, incident notification within 72 hours, and a final report within one month after the notification (Art. 23(4)).
+  - id: nis2-005
+    lang: en
+    category: obligation
+    question: What must management bodies of essential and important entities do under NIS2?
+    expected: ["32022L2555:art_20:p1", "32022L2555:art_20:p2"]
+    reference: Approve the cybersecurity risk-management measures, oversee their implementation, can be held liable, and follow training (Art. 20).
+  - id: nis2-006
+    lang: en
+    category: lookup
+    question: What are the maximum fines for essential entities under NIS2?
+    expected: ["32022L2555:art_34:p4"]
+    reference: A maximum of at least EUR 10 000 000 or at least 2 % of total worldwide annual turnover, whichever is higher (Art. 34(4)).
+  - id: nis2-007
+    lang: en
+    category: lookup
+    question: What are the maximum fines for important entities under NIS2?
+    expected: ["32022L2555:art_34:p5"]
+    reference: A maximum of at least EUR 7 000 000 or at least 1,4 % of total worldwide annual turnover, whichever is higher (Art. 34(5)).
+  - id: nis2-008
+    lang: en
+    category: lookup
+    question: What is the European vulnerability database?
+    expected: ["32022L2555:art_12:p2"]
+    reference: A database developed and maintained by ENISA for publicly known vulnerabilities in ICT products and services (Art. 12(2)).
+  - id: nis2-009
+    lang: en
+    category: lookup
+    question: Who must designate CSIRTs under NIS2?
+    expected: ["32022L2555:art_10:p1"]
+    reference: Each Member State must designate or establish one or more CSIRTs (Art. 10(1)).
+  - id: nis2-010
+    lang: en
+    category: lookup
+    question: What supervisory measures can authorities apply to essential entities?
+    expected: ["32022L2555:art_32"]
+    reference: On-site inspections, off-site supervision, regular and targeted audits, security scans, information requests, and requests for evidence (Art. 32).
+  - id: nis2-011
+    lang: fr
+    category: obligation
+    question: Quels sont les délais de notification des incidents importants prévus par NIS 2 ?
+    expected: ["32022L2555:art_23:p4"]
+    reference: Alerte précoce sous 24 heures, notification d'incident sous 72 heures, rapport final dans un délai d'un mois (art. 23, par. 4).
+  - id: nis2-012
+    lang: fr
+    category: obligation
+    question: Quelles mesures de gestion des risques en matière de cybersécurité les entités essentielles doivent-elles prendre ?
+    expected: ["32022L2555:art_21:p2", "32022L2555:art_21:p1"]
+    reference: Analyse des risques, gestion des incidents, continuité des activités, sécurité de la chaîne d'approvisionnement, cryptographie, authentification multifactorielle, etc. (art. 21, par. 2).
+  - id: nis2-013
+    lang: fr
+    category: obligation
+    question: Les membres des organes de direction doivent-ils suivre une formation en cybersécurité ?
+    expected: ["32022L2555:art_20:p2"]
+    reference: Oui, les États membres veillent à ce qu'ils soient tenus de suivre une formation (art. 20, par. 2).
+
+  # ------------------------------------------------------------------ DSA (32022R2065)
+  - id: dsa-001
+    lang: en
+    category: lookup
+    question: When is a mere conduit service provider not liable for the information it transmits?
+    expected: ["32022R2065:art_4:p1"]
+    reference: When it does not initiate the transmission, select the receiver, or select or modify the information (Art. 4(1)).
+  - id: dsa-002
+    lang: en
+    category: lookup
+    question: Under what conditions is a hosting provider exempt from liability?
+    expected: ["32022R2065:art_6:p1"]
+    reference: When it has no actual knowledge of illegal content and, upon obtaining knowledge, acts expeditiously to remove or disable access to it (Art. 6(1)).
+  - id: dsa-003
+    lang: en
+    category: lookup
+    question: Does the DSA impose a general obligation to monitor content?
+    expected: ["32022R2065:art_8"]
+    reference: No, there is no general obligation to monitor information or actively seek facts indicating illegal activity (Art. 8).
+  - id: dsa-004
+    lang: en
+    category: obligation
+    question: What notice and action mechanisms must hosting providers put in place?
+    expected: ["32022R2065:art_16"]
+    reference: Easy-to-access, user-friendly electronic mechanisms allowing anyone to notify specific illegal content, with required notice elements (Art. 16).
+  - id: dsa-005
+    lang: en
+    category: obligation
+    question: When must a hosting provider provide a statement of reasons?
+    expected: ["32022R2065:art_17:p1"]
+    reference: For any restriction imposed because content is illegal or incompatible with terms and conditions, such as removal, demotion, suspension or monetary restrictions (Art. 17(1)).
+  - id: dsa-006
+    lang: en
+    category: obligation
+    question: What internal complaint-handling system must online platforms provide?
+    expected: ["32022R2065:art_20:p1"]
+    reference: An electronic, free-of-charge system for at least six months after a decision, allowing complaints against moderation decisions (Art. 20(1)).
+  - id: dsa-007
+    lang: en
+    category: lookup
+    question: How must online platforms treat notices from trusted flaggers?
+    expected: ["32022R2065:art_22:p1"]
+    reference: With priority, processed and decided upon without undue delay (Art. 22(1)).
+  - id: dsa-008
+    lang: en
+    category: lookup
+    question: Are dark patterns prohibited under the DSA?
+    expected: ["32022R2065:art_25:p1"]
+    reference: Online platforms must not design interfaces that deceive, manipulate or materially distort users' ability to make free and informed decisions (Art. 25(1)).
+  - id: dsa-009
+    lang: en
+    category: obligation
+    question: What information must online platforms display for each advertisement?
+    expected: ["32022R2065:art_26:p1"]
+    reference: That it is an advertisement, on whose behalf it is presented, who paid for it, and the main targeting parameters and how to change them (Art. 26(1)).
+  - id: dsa-010
+    lang: en
+    category: lookup
+    question: Can online platforms show ads based on profiling using special categories of personal data?
+    expected: ["32022R2065:art_26:p3"]
+    reference: No, advertising based on profiling using special categories of personal data referred to in Article 9(1) GDPR is prohibited (Art. 26(3)).
+  - id: dsa-011
+    lang: en
+    category: obligation
+    question: What must online platforms disclose about their recommender systems?
+    expected: ["32022R2065:art_27:p1"]
+    reference: The main parameters and options to modify or influence them, in plain and intelligible language in their terms and conditions (Art. 27(1)).
+  - id: dsa-012
+    lang: en
+    category: obligation
+    question: What must online platforms accessible to minors do?
+    expected: ["32022R2065:art_28:p1", "32022R2065:art_28:p2"]
+    reference: Ensure a high level of privacy, safety and security of minors, and not present profiling-based ads when they are aware the user is a minor (Art. 28(1)-(2)).
+  - id: dsa-013
+    lang: en
+    category: lookup
+    question: What is the user threshold for designation as a very large online platform?
+    expected: ["32022R2065:art_33:p1"]
+    reference: 45 million or more average monthly active recipients in the Union (Art. 33(1)).
+  - id: dsa-014
+    lang: en
+    category: obligation
+    question: What systemic risks must very large online platforms assess?
+    expected: ["32022R2065:art_34:p1"]
+    reference: Dissemination of illegal content, negative effects on fundamental rights, on civic discourse, elections and public security, and on gender-based violence, public health, minors and well-being (Art. 34(1)).
+  - id: dsa-015
+    lang: en
+    category: lookup
+    question: What fines can the Commission impose on very large online platforms?
+    expected: ["32022R2065:art_74:p1"]
+    reference: Fines not exceeding 6 % of total worldwide annual turnover in the preceding financial year (Art. 74(1)).
+  - id: dsa-016
+    lang: fr
+    category: lookup
+    question: À partir de combien d'utilisateurs une plateforme est-elle considérée comme une très grande plateforme en ligne ?
+    expected: ["32022R2065:art_33:p1"]
+    reference: 45 millions de destinataires actifs mensuels moyens dans l'Union (art. 33, par. 1).
+  - id: dsa-017
+    lang: fr
+    category: lookup
+    question: Les interfaces trompeuses sont-elles interdites par le règlement sur les services numériques ?
+    expected: ["32022R2065:art_25:p1"]
+    reference: Oui, les plateformes ne doivent pas concevoir d'interfaces qui trompent ou manipulent les utilisateurs (art. 25, par. 1).
+  - id: dsa-018
+    lang: fr
+    category: lookup
+    question: La publicité fondée sur le profilage est-elle autorisée pour les mineurs ?
+    expected: ["32022R2065:art_28:p2"]
+    reference: Non, lorsque la plateforme sait avec une certitude raisonnable que l'utilisateur est mineur (art. 28, par. 2).
+
+  # ------------------------------------------------------------------ Data Act (32023R2854)
+  - id: data-001
+    lang: en
+    category: obligation
+    question: How must connected products be designed with regard to access to product data?
+    expected: ["32023R2854:art_3:p1"]
+    reference: So that product data and related service data are, by default, easily, securely, free of charge accessible to the user, directly where relevant and technically feasible (Art. 3(1)).
+  - id: data-002
+    lang: en
+    category: lookup
+    question: What rights do users have to access data generated by their connected product?
+    expected: ["32023R2854:art_4"]
+    reference: Where not directly accessible, data holders must make readily available data accessible to the user without undue delay, free of charge, continuously and in real time where feasible (Art. 4).
+  - id: data-003
+    lang: en
+    category: lookup
+    question: Can a user ask the data holder to share their product data with a third party?
+    expected: ["32023R2854:art_5:p1"]
+    reference: Yes, upon request by the user, the data holder must make the data available to a third party without undue delay (Art. 5(1)).
+  - id: data-004
+    lang: en
+    category: lookup
+    question: What is the rule on unfair contractual terms concerning data access imposed unilaterally on an enterprise?
+    expected: ["32023R2854:art_13"]
+    reference: Such a term is not binding on the enterprise if it is unfair (Art. 13).
+  - id: data-005
+    lang: en
+    category: lookup
+    question: When can public sector bodies request data from businesses under the Data Act?
+    expected: ["32023R2854:art_14", "32023R2854:art_15"]
+    reference: When they demonstrate an exceptional need, such as responding to a public emergency or carrying out a specific task in the public interest (Art. 14-15).
+  - id: data-006
+    lang: en
+    category: obligation
+    question: What must providers of data processing services do to enable customers to switch?
+    expected: ["32023R2854:art_23"]
+    reference: Remove obstacles to switching and take the measures in Articles 25, 26, 27, 29 and 30 (Art. 23).
+  - id: data-007
+    lang: en
+    category: obligation
+    question: What must a cloud switching contract include?
+    expected: ["32023R2854:art_25:p2"]
+    reference: Clauses on switching and porting, a maximum notice period, a transitional period of up to 30 calendar days, exhaustive specifications of exportable data, and a data retrieval period (Art. 25(2)).
+  - id: data-008
+    lang: en
+    category: temporal
+    question: From when are switching charges prohibited for data processing services?
+    expected: ["32023R2854:art_29:p1"]
+    reference: From 12 January 2027 (Art. 29(1)).
+  - id: data-009
+    lang: en
+    category: obligation
+    question: What must cloud providers do to prevent unlawful international governmental access to non-personal data?
+    expected: ["32023R2854:art_32:p1"]
+    reference: Take all adequate technical, organisational and legal measures, including contracts, to prevent access or transfer conflicting with Union or national law (Art. 32(1)).
+  - id: data-010
+    lang: en
+    category: obligation
+    question: What essential requirements apply to smart contracts for executing data sharing agreements?
+    expected: ["32023R2854:art_36:p1"]
+    reference: Robustness and access control, safe termination and interruption, data archiving and continuity, and consistency with the data sharing agreement (Art. 36(1)).
+  - id: data-011
+    lang: en
+    category: obligation
+    question: What interoperability requirements apply to participants in data spaces?
+    expected: ["32023R2854:art_33:p1"]
+    reference: Describe dataset content, data structures and formats, technical means of access, and means to enable interoperability of smart contracts (Art. 33(1)).
+  - id: data-012
+    lang: fr
+    category: temporal
+    question: À partir de quand les frais de changement de fournisseur de services cloud sont-ils interdits ?
+    expected: ["32023R2854:art_29:p1"]
+    reference: À partir du 12 janvier 2027 (art. 29, par. 1).
+  - id: data-013
+    lang: fr
+    category: lookup
+    question: Un utilisateur peut-il demander que les données de son produit connecté soient partagées avec un tiers ?
+    expected: ["32023R2854:art_5:p1"]
+    reference: Oui, le détenteur de données doit les mettre à la disposition d'un tiers à la demande de l'utilisateur (art. 5, par. 1).
+
+  # ------------------------------------------------------------------ temporal
+  - id: time-001
+    lang: en
+    category: temporal
+    question: From when does the GDPR apply?
+    expected: ["32016R0679:art_99:p2"]
+    reference: From 25 May 2018 (Art. 99(2)).
+  - id: time-002
+    lang: en
+    category: temporal
+    question: When do the AI Act's prohibitions on AI practices start to apply?
+    expected: ["32024R1689:art_113"]
+    reference: Chapters I and II, including the prohibitions, apply from 2 February 2025 (Art. 113(a)).
+  - id: time-003
+    lang: en
+    category: temporal
+    question: From which date does the AI Act apply in general?
+    expected: ["32024R1689:art_113"]
+    reference: From 2 August 2026, with earlier dates for Chapters I-II (2 February 2025) and GPAI and governance rules (2 August 2025), and a later date for Article 6(1) (2 August 2027) (Art. 113).
+  - id: time-004
+    lang: en
+    category: temporal
+    question: When did DORA start to apply?
+    expected: ["32022R2554:art_64"]
+    reference: From 17 January 2025 (Art. 64).
+  - id: time-005
+    lang: en
+    category: temporal
+    question: By when did Member States have to transpose NIS2 into national law?
+    expected: ["32022L2555:art_41:p1"]
+    reference: By 17 October 2024, applying the measures from 18 October 2024 (Art. 41).
+  - id: time-006
+    lang: en
+    category: temporal
+    question: From when does the Digital Services Act apply?
+    expected: ["32022R2065:art_93:p2"]
+    reference: From 17 February 2024, with some provisions applying earlier (Art. 93(2)).
+  - id: time-007
+    lang: en
+    category: temporal
+    question: When does the Data Act apply?
+    expected: ["32023R2854:art_50"]
+    reference: From 12 September 2025; the Article 3(1) design obligation applies to products placed on the market after 12 September 2026 (Art. 50).
+  - id: time-008
+    lang: fr
+    category: temporal
+    question: À partir de quand les règles relatives aux modèles d'IA à usage général s'appliquent-elles ?
+    expected: ["32024R1689:art_113"]
+    reference: Le chapitre V s'applique à partir du 2 août 2025 (art. 113, point b).
+
+  # ------------------------------------------------------------------ cross-regulation
+  - id: cross-001
+    lang: en
+    category: cross_regulation
+    question: How do breach notification deadlines under the GDPR compare with incident reporting deadlines under NIS2?
+    expected: ["32016R0679:art_33:p1", "32022L2555:art_23:p4"]
+    reference: GDPR requires notifying the supervisory authority within 72 hours where feasible; NIS2 requires an early warning within 24 hours, a notification within 72 hours and a final report within one month.
+  - id: cross-002
+    lang: en
+    category: cross_regulation
+    question: Which has higher maximum fines, the GDPR or the AI Act for prohibited practices?
+    expected: ["32016R0679:art_83:p5", "32024R1689:art_99:p3"]
+    reference: The AI Act (EUR 35 million or 7 %) exceeds the GDPR (EUR 20 million or 4 %).
+  - id: cross-003
+    lang: en
+    category: cross_regulation
+    question: Does NIS2 still apply when a sector-specific act like DORA imposes equivalent cybersecurity requirements?
+    expected: ["32022L2555:art_4:p1", "32022R2554:art_1:p2"]
+    reference: Where sector-specific Union acts impose at least equivalent requirements, the corresponding NIS2 provisions do not apply to those entities; DORA is such an act for financial entities.
+  - id: cross-004
+    lang: en
+    category: cross_regulation
+    question: How does the Data Act relate to the GDPR when the data are personal data?
+    expected: ["32023R2854:art_1:p5"]
+    reference: The Data Act is without prejudice to Union data protection law; in case of conflict, the GDPR prevails (Art. 1(5) Data Act).
+  - id: cross-005
+    lang: en
+    category: cross_regulation
+    question: Does the AI Act affect the application of the GDPR?
+    expected: ["32024R1689:art_2:p7"]
+    reference: No, Union data protection law applies to personal data processed in connection with the AI Act, which does not affect the GDPR (Art. 2(7) AI Act).
+  - id: cross-006
+    lang: en
+    category: cross_regulation
+    question: Compare the obligations of management bodies under NIS2 and DORA.
+    expected: ["32022L2555:art_20", "32022R2554:art_5:p2"]
+    reference: NIS2 requires management bodies to approve and oversee cybersecurity measures and follow training; DORA makes the management body define, approve, oversee and be responsible for ICT risk management.
+  - id: cross-007
+    lang: en
+    category: cross_regulation
+    question: What is the difference between a GDPR data protection impact assessment and an AI Act fundamental rights impact assessment?
+    expected: ["32016R0679:art_35:p1", "32024R1689:art_27:p1"]
+    reference: The DPIA covers high-risk processing of personal data by controllers; the FRIA is required of certain deployers of high-risk AI systems and covers impacts on fundamental rights more broadly.
+  - id: cross-008
+    lang: en
+    category: cross_regulation
+    question: How do the GDPR and the DSA protect children online?
+    expected: ["32016R0679:art_8:p1", "32022R2065:art_28"]
+    reference: GDPR requires parental consent under 16 (or a lower national age, at least 13) for information society services; the DSA requires platforms accessible to minors to ensure privacy, safety and security and bans profiling-based ads to minors.
+  - id: cross-009
+    lang: en
+    category: cross_regulation
+    question: Compare the maximum fines under the DSA and the GDPR.
+    expected: ["32022R2065:art_74:p1", "32022R2065:art_52:p3", "32016R0679:art_83:p5"]
+    reference: DSA up to 6 % of worldwide annual turnover; GDPR up to EUR 20 million or 4 %, whichever is higher.
+  - id: cross-010
+    lang: en
+    category: cross_regulation
+    question: How do the GDPR rules on automated decision-making relate to human oversight in the AI Act?
+    expected: ["32016R0679:art_22", "32024R1689:art_14"]
+    reference: GDPR gives a right not to be subject to solely automated decisions with significant effects; the AI Act requires high-risk AI systems to be designed for effective human oversight.
+  - id: cross-011
+    lang: en
+    category: cross_regulation
+    question: Compare incident reporting obligations under DORA and NIS2.
+    expected: ["32022R2554:art_19:p1", "32022L2555:art_23:p4"]
+    reference: DORA requires financial entities to report major ICT-related incidents to competent authorities, with deadlines set by RTS; NIS2 sets 24h/72h/one-month stages for significant incidents.
+  - id: cross-012
+    lang: fr
+    category: cross_regulation
+    question: Comparez les amendes maximales prévues par NIS 2 pour les entités essentielles et par le RGPD.
+    expected: ["32022L2555:art_34:p4", "32016R0679:art_83:p5"]
+    reference: NIS 2 prévoit un maximum d'au moins 10 millions EUR ou 2 % du chiffre d'affaires ; le RGPD jusqu'à 20 millions EUR ou 4 %.
+  - id: cross-013
+    lang: fr
+    category: cross_regulation
+    question: Le règlement sur les services numériques porte-t-il atteinte aux règles de protection des données ?
+    expected: ["32022R2065:art_2:p4"]
+    reference: Non, il est sans préjudice des autres actes de l'Union, dont le droit de la protection des données (art. 2, par. 4).
+
+  # ------------------------------------------------------------------ unanswerable (not in the corpus)
+  - id: none-001
+    lang: en
+    category: unanswerable
+    question: What is the maximum fine under the French law transposing NIS2?
+    answerable: false
+    expected: []
+    reference: Not in the corpus, which contains the Directive only, not national transposition laws.
+  - id: none-002
+    lang: en
+    category: unanswerable
+    question: What does the California Consumer Privacy Act say about selling personal information?
+    answerable: false
+    expected: []
+    reference: Not in the corpus (US state law).
+  - id: none-003
+    lang: en
+    category: unanswerable
+    question: Which companies have been fined by the European Commission under the DSA?
+    answerable: false
+    expected: []
+    reference: Enforcement decisions are not in the corpus.
+  - id: none-004
+    lang: en
+    category: unanswerable
+    question: What is the corporate income tax rate in Ireland?
+    answerable: false
+    expected: []
+    reference: Out of scope.
+  - id: none-005
+    lang: en
+    category: unanswerable
+    question: What cookie retention period does the CNIL recommend?
+    answerable: false
+    expected: []
+    reference: CNIL guidance is not in the corpus.
+  - id: none-006
+    lang: en
+    category: unanswerable
+    question: Does the UK GDPR require small businesses to appoint a DPO?
+    answerable: false
+    expected: []
+    reference: The UK GDPR is not in the corpus.
+  - id: none-007
+    lang: en
+    category: unanswerable
+    question: How much does it cost to have a high-risk AI system assessed by a notified body?
+    answerable: false
+    expected: []
+    reference: Fees are not set by the AI Act.
+  - id: none-008
+    lang: fr
+    category: unanswerable
+    question: Quel est le délai de prescription d'une action en responsabilité civile en France ?
+    answerable: false
+    expected: []
+    reference: Droit national, hors corpus.
+  - id: none-009
+    lang: fr
+    category: unanswerable
+    question: Quelles sanctions la CNIL a-t-elle prononcées contre Google en 2022 ?
+    answerable: false
+    expected: []
+    reference: Décisions de sanction hors corpus.
+  - id: none-010
+    lang: en
+    category: unanswerable
+    question: What is the minimum wage in Germany?
+    answerable: false
+    expected: []
+    reference: Out of scope.
+  - id: none-011
+    lang: en
+    category: unanswerable
+    question: Which cloud providers have been designated as critical ICT third-party service providers under DORA so far?
+    answerable: false
+    expected: []
+    reference: Designation decisions are not in the corpus; DORA only sets the procedure (Art. 31).
+  - id: none-012
+    lang: fr
+    category: unanswerable
+    question: Quel est le taux de TVA applicable aux services numériques en France ?
+    answerable: false
+    expected: []
+    reference: Hors corpus.
+
+  # ------------------------------------------------------------------ false premise
+  - id: premise-001
+    lang: en
+    category: false_premise
+    question: What does Article 120 of the GDPR say?
+    answerable: false
+    expected: []
+    reference: The GDPR has only 99 articles; Article 120 does not exist.
+  - id: premise-002
+    lang: en
+    category: false_premise
+    question: What penalties does Article 70 of DORA provide?
+    answerable: false
+    expected: []
+    reference: DORA has 64 articles; Article 70 does not exist.
+  - id: premise-003
+    lang: en
+    category: false_premise
+    question: Why does the GDPR give controllers 48 hours to notify a data breach?
+    expected: ["32016R0679:art_33:p1"]
+    reference: The premise is wrong; the deadline is 72 hours where feasible (Art. 33(1)).
+  - id: premise-004
+    lang: en
+    category: false_premise
+    question: Why does the AI Act ban all use of facial recognition?
+    expected: ["32024R1689:art_5:p1"]
+    reference: It does not; it prohibits specific practices such as untargeted scraping of facial images and real-time remote biometric identification in public spaces for law enforcement, with exceptions (Art. 5(1)).
+  - id: premise-005
+    lang: en
+    category: false_premise
+    question: Given that NIS2 caps fines for essential entities at 4 % of turnover, how are they calculated?
+    expected: ["32022L2555:art_34:p4"]
+    reference: The premise is wrong; NIS2 sets a maximum of at least EUR 10 million or 2 % of worldwide turnover (Art. 34(4)).
+  - id: premise-006
+    lang: en
+    category: false_premise
+    question: Since gatekeepers are eligible third parties under the Data Act, how can they request user data?
+    expected: ["32023R2854:art_5:p3"]
+    reference: The premise is wrong; gatekeepers designated under the DMA are not eligible third parties (Art. 5(3)).
+  - id: premise-007
+    lang: fr
+    category: false_premise
+    question: Pourquoi le DSA ne s'applique-t-il qu'aux plateformes de plus de 10 millions d'utilisateurs ?
+    expected: ["32022R2065:art_33:p1"]
+    reference: La prémisse est fausse ; le DSA s'applique à tous les services intermédiaires, et le seuil des très grandes plateformes est de 45 millions (art. 33, par. 1).

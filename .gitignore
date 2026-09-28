@@ -22,6 +22,8 @@ htmlcov/
 # Data (versioned with DVC from M1/M2, never with git)
 data/
 mlruns/
+mlflow.db
+eval/reports/
 
 # IDE / OS
 .idea/
