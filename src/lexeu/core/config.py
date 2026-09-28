@@ -51,6 +51,24 @@ class IngestionSettings(BaseModel):
     chunk_max_chars: int = 1800
 
 
+class EmbeddingSettings(BaseModel):
+    url: str = "http://127.0.0.1:8081"  # text-embeddings-inference (compose profile `ml`)
+    model_id: str = "BAAI/bge-m3"
+    revision: str = (
+        "5617a9f61b028005a4858fdac845db406aefb181"  # pinned on both batch and online paths
+    )
+    batch_size: int = 8  # TEI's ONNX CPU backend caps batches at 8
+    cache_path: str = "data/embeddings/bge-m3.sqlite"
+
+
+class EvalSettings(BaseModel):
+    golden_path: str = "eval/golden/golden_v1.yaml"
+    thresholds_path: str = "eval/thresholds.yaml"
+    reports_dir: str = "eval/reports"
+    mlflow_tracking_uri: str = "sqlite:///mlflow.db"
+    mlflow_experiment: str = "rag-lexeu-retrieval"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -69,6 +87,8 @@ class Settings(BaseSettings):
     redis: RedisSettings = RedisSettings()
     object_store: ObjectStoreSettings = ObjectStoreSettings()
     ingestion: IngestionSettings = IngestionSettings()
+    embeddings: EmbeddingSettings = EmbeddingSettings()
+    eval: EvalSettings = EvalSettings()
 
 
 @lru_cache

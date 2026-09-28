@@ -66,7 +66,10 @@ async def engine(migrated: Settings) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(migrated.postgres.dsn)
     async with engine.begin() as conn:
         await conn.execute(
-            text("TRUNCATE documents, chunks, ingestion_runs RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE documents, chunks, ingestion_runs, search_indexes"
+                " RESTART IDENTITY CASCADE"
+            )
         )
     yield engine
     await engine.dispose()

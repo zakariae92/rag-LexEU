@@ -21,6 +21,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    update,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -79,6 +80,22 @@ class IngestionRunRow(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16))  # running | succeeded | failed
     stats: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class SearchIndexRow(Base):
+    """Every vector index ever built: which model, which chunks, and which one is live."""
+
+    __tablename__ = "search_indexes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    collection: Mapped[str] = mapped_column(String(64), unique=True)
+    alias: Mapped[str] = mapped_column(String(64))
+    model_id: Mapped[str] = mapped_column(Text)
+    dim: Mapped[int] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    n_points: Mapped[int] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 @dataclass(frozen=True)
@@ -197,3 +214,54 @@ def _record(row: DocumentRow) -> DocumentRecord:
         pipeline_version=row.pipeline_version,
         n_chunks=row.n_chunks,
     )
+
+
+@dataclass(frozen=True)
+class IndexRecord:
+    collection: str
+    alias: str
+    model_id: str
+    dim: int
+    fingerprint: str
+    n_points: int
+
+
+class SqlIndexRegistry:
+    """Lineage of vector indexes: which collection is live behind an alias, with which model."""
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def all_chunks(self) -> list[ChunkRow]:
+        async with self._session() as s:
+            query = select(ChunkRow).order_by(ChunkRow.celex, ChunkRow.lang, ChunkRow.ordinal)
+            return list(await s.scalars(query))
+
+    async def activate(self, record: IndexRecord) -> None:
+        """Record a newly built index and mark it as the live one for its alias."""
+        async with self._session.begin() as s:
+            await s.execute(
+                update(SearchIndexRow)
+                .where(SearchIndexRow.alias == record.alias)
+                .values(active=False)
+            )
+            row = await s.scalar(
+                select(SearchIndexRow).where(SearchIndexRow.collection == record.collection)
+            )
+            if row is None:
+                row = SearchIndexRow(**vars(record))
+                s.add(row)
+            row.active = True
+
+    async def active(self, alias: str) -> IndexRecord | None:
+        async with self._session() as s:
+            row = await s.scalar(
+                select(SearchIndexRow).where(
+                    SearchIndexRow.alias == alias, SearchIndexRow.active.is_(True)
+                )
+            )
+            if row is None:
+                return None
+            return IndexRecord(
+                row.collection, row.alias, row.model_id, row.dim, row.fingerprint, row.n_points
+            )

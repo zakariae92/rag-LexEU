@@ -3,6 +3,8 @@
 #   docker compose up -d --wait                  -> infrastructure only (run the API with `uv run poe dev`)
 #   docker compose --profile app up -d --wait    -> infrastructure + API container
 #
+#   docker compose --profile ml up -d --wait     -> + embedding server (BGE-M3, ~4 GB RAM)
+#
 # Later milestones add profiles: `obs` (Langfuse, Prometheus, Grafana) and `pipeline` (Prefect, MLflow).
 # All ports bind to 127.0.0.1: nothing is exposed to the local network.
 
@@ -84,6 +86,29 @@ services:
       retries: 12
       start_period: 10s
 
+  embeddings:
+    <<: *restart
+    profiles: ["ml"]
+    # HuggingFace text-embeddings-inference, CPU build (ONNX). Batches are capped because the
+    # default warm-up (16k tokens) runs out of memory with BGE-M3 on a 6 GB Docker VM.
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.4
+    command:
+      - --model-id=${EMBEDDINGS__MODEL_ID:-BAAI/bge-m3}
+      - --revision=${EMBEDDINGS__REVISION:-5617a9f61b028005a4858fdac845db406aefb181}
+      - --max-batch-tokens=4096
+      - --max-client-batch-size=32
+      - --auto-truncate
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - hf_cache:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:80/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
   api:
     <<: *restart
     profiles: ["app"]
@@ -115,3 +140,5 @@ volumes:
   postgres_data:
   redis_data:
   object_data:
+  hf_cache:
+    name: lexeu_hf_cache  # shared model cache, survives `docker compose down -v` of other volumes
