@@ -1,0 +1,5 @@
+# Normalize line endings: LF in the repo and in Linux containers, even when edited on Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary

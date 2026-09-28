@@ -1,0 +1,105 @@
+[project]
+name = "rag-lexeu"
+version = "0.1.0"
+description = "Production-grade bilingual (EN/FR) RAG assistant over EU regulations (GDPR, AI Act, DORA, NIS2, DSA, Data Act)."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Zakariae Maayzou" }]
+license = { text = "MIT" }
+dependencies = [
+    "asyncpg>=0.31.0",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "qdrant-client>=1.19.1",
+    "redis[hiredis]>=8.1.0",
+    "sqlalchemy[asyncio]>=2.1.1",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "lexeu"
+
+# ---------------------------------------------------------------- tasks
+[tool.poe]
+envfile = ".env"
+
+[tool.poe.tasks.dev]
+help = "Run the API with hot reload"
+cmd = "uvicorn lexeu.api.main:create_app --factory --reload --port ${API_PORT}"
+env = { API_PORT.default = "8000" }
+
+[tool.poe.tasks]
+fmt = { cmd = "ruff format .", help = "Format code" }
+test = { cmd = "pytest", help = "Run tests" }
+up = { cmd = "docker compose up -d --wait", help = "Start infrastructure (Qdrant, Postgres, Redis, object store)" }
+up-all = { cmd = "docker compose --profile app up -d --build --wait", help = "Start infrastructure + API container" }
+down = { cmd = "docker compose --profile app down", help = "Stop everything" }
+
+[tool.poe.tasks.lint]
+help = "Lint, check formatting and type-check"
+sequence = [
+    { cmd = "ruff check ." },
+    { cmd = "ruff format --check ." },
+    { cmd = "mypy" },
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",  # pycodestyle, pyflakes
+    "I",            # isort
+    "B",            # bugbear
+    "UP",           # pyupgrade
+    "SIM",          # simplify
+    "ASYNC",        # async pitfalls
+    "S",            # bandit (security)
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert is fine in tests
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+files = ["src", "tests"]
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_decorators = false
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers --cov=lexeu --cov-report=term-missing"
+markers = ["integration: needs the docker compose stack running"]
+
+[tool.coverage.run]
+branch = true
+source = ["lexeu"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "mypy>=2.3.1",
+    "poethepoet>=0.48.0",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+]
