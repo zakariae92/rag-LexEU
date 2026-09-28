@@ -8,3 +8,4 @@ Format: [Michael Nygard's ADR template](https://cognitect.com/blog/2011/11/15/do
 | [0001](0001-llm-serving.md) | Hybrid LLM serving: self-hosted open weights on serverless GPU + Gemini API behind LiteLLM | Accepted |
 | [0002](0002-vector-store.md) | Qdrant as the vector store | Accepted |
 | [0003](0003-object-storage.md) | RustFS as the local S3-compatible object store | Accepted |
+| [0004](0004-ingestion-and-chunking.md) | Ingest from the Cellar API, chunk along the legal structure | Accepted |
