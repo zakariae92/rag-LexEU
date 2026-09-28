@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class PostgresSettings(BaseModel):
-    host: str = "localhost"
+    host: str = "127.0.0.1"
     port: int = 5432
     user: str = "lexeu"
     password: SecretStr = SecretStr("lexeu")
@@ -24,18 +24,18 @@ class PostgresSettings(BaseModel):
 
 
 class QdrantSettings(BaseModel):
-    url: str = "http://localhost:6333"
+    url: str = "http://127.0.0.1:6333"
     api_key: SecretStr | None = None
 
 
 class RedisSettings(BaseModel):
-    url: str = "redis://localhost:6379/0"
+    url: str = "redis://127.0.0.1:6379/0"
 
 
 class ObjectStoreSettings(BaseModel):
     """S3-compatible object store (RustFS locally, AWS S3 / any S3 API in the cloud)."""
 
-    endpoint: str = "http://localhost:9000"
+    endpoint: str = "http://127.0.0.1:9000"
     access_key: str = "lexeu"
     secret_key: SecretStr = SecretStr("lexeu-secret")
     bucket_raw: str = "lexeu-raw"

@@ -6,8 +6,8 @@ from lexeu.core.config import Settings
 def test_defaults_point_to_local_stack() -> None:
     s = Settings(_env_file=None)
     assert s.env == "local"
-    assert s.qdrant.url == "http://localhost:6333"
-    assert s.postgres.dsn == "postgresql+asyncpg://lexeu:lexeu@localhost:5432/lexeu"
+    assert s.qdrant.url == "http://127.0.0.1:6333"
+    assert s.postgres.dsn == "postgresql+asyncpg://lexeu:lexeu@127.0.0.1:5432/lexeu"
 
 
 def test_nested_env_vars_override(monkeypatch: pytest.MonkeyPatch) -> None:
