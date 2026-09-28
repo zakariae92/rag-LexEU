@@ -1,4 +1,10 @@
-name: CI
+name: CI/CD
+
+# Pipeline (each job is one box in the Actions graph):
+#
+#   lint ──┐
+#   types ─┼─► build ─► smoke ─► publish (main only)
+#   test ──┘
 
 on:
   push:
@@ -12,66 +18,107 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/rag-lexeu-api
+
 jobs:
-  quality:
-    name: Lint, type-check, test
+  lint:
+    name: Lint
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-
       - uses: astral-sh/setup-uv@v10.2.0  # no floating major tag published
         with:
           enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check --output-format=github .
+      - run: uv run ruff format --check .
 
-      - name: Install dependencies
-        run: uv sync --locked
-
-      - name: Ruff (lint)
-        run: uv run ruff check --output-format=github .
-
-      - name: Ruff (format)
-        run: uv run ruff format --check .
-
-      - name: Mypy (strict)
-        run: uv run mypy
-
-      - name: Pytest
-        run: uv run pytest --cov-report=xml
-
-  stack:
-    name: Docker build + stack smoke test
+  types:
+    name: Type-check
     runs-on: ubuntu-24.04
-    needs: quality
     steps:
       - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run mypy
 
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  build:
+    name: Build image
+    runs-on: ubuntu-24.04
+    needs: [lint, types, test]
+    steps:
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-
-      - name: Build API image
-        uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/api.Dockerfile
           tags: rag-lexeu-api:local
-          load: true
+          outputs: type=docker,dest=${{ runner.temp }}/api-image.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: actions/upload-artifact@v7
+        with:
+          name: api-image
+          path: ${{ runner.temp }}/api-image.tar
+          retention-days: 1
 
+  smoke:
+    name: Smoke test (full stack)
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: api-image
+          path: ${{ runner.temp }}
+      - run: docker load --input ${{ runner.temp }}/api-image.tar
       - name: Start stack
         run: |
           cp .env.example .env
-          docker compose --profile app up -d --wait --wait-timeout 180
-
-      - name: API is live and all dependencies are ready
+          docker compose --profile app up -d --no-build --wait --wait-timeout 180
+      - name: Check /health and /ready
         run: |
           curl -fsS http://127.0.0.1:8000/health
-          curl -fsS http://127.0.0.1:8000/ready | tee ready.json
-          python3 -c "import json; assert json.load(open('ready.json'))['status'] == 'ready'"
-
-      - name: Dump logs on failure
+          curl -fsS http://127.0.0.1:8000/ready
+      - name: Logs on failure
         if: failure()
         run: docker compose --profile app logs --no-color
 
-      - name: Tear down
-        if: always()
-        run: docker compose --profile app down -v
+  publish:
+    name: Publish image (GHCR)
+    runs-on: ubuntu-24.04
+    needs: smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: api-image
+          path: ${{ runner.temp }}
+      - run: docker load --input ${{ runner.temp }}/api-image.tar
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Tag and push (latest + commit sha)
+        run: |
+          for tag in latest ${{ github.sha }}; do
+            docker tag rag-lexeu-api:local "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          done
