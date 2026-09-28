@@ -2,9 +2,9 @@ name: CI/CD
 
 # Pipeline (each job is one box in the Actions graph):
 #
-#   lint ──┐
-#   types ─┼─► build ─► smoke ─► publish (main only)
-#   test ──┘
+#   lint ──┐   ┌─► integration
+#   types ─┼───┤
+#   test ──┘   └─► build ─► smoke ─► publish (main only)
 
 on:
   push:
@@ -56,6 +56,23 @@ jobs:
       - run: uv sync --locked
       - run: uv run pytest
 
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-24.04
+    needs: [lint, types, test]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Start infrastructure (Postgres, Qdrant, Redis, object store)
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait --wait-timeout 180
+      - name: Pytest -m integration (real Postgres + S3, Alembic migrations)
+        run: uv run pytest -m integration --no-cov
+
   build:
     name: Build image
     runs-on: ubuntu-24.04
@@ -96,6 +113,11 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8000/health
           curl -fsS http://127.0.0.1:8000/ready
+      - name: Migrate and ingest one act from Cellar (inside the image)
+        run: |
+          docker compose run --rm api alembic upgrade head
+          docker compose run --rm api lexeu ingest --celex 32016R0679
+          docker compose run --rm api lexeu corpus status
       - name: Logs on failure
         if: failure()
         run: docker compose --profile app logs --no-color

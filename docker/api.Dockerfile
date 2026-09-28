@@ -27,7 +27,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:${PYTHON_VERSION}-slim AS runtime
 RUN groupadd --system --gid 1000 app \
  && useradd --system --uid 1000 --gid app --no-create-home app
+WORKDIR /app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
+# Migrations ship with the image: `docker compose run --rm api alembic upgrade head`
+COPY --chown=app:app alembic.ini ./
+COPY --chown=app:app migrations ./migrations
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 USER app
