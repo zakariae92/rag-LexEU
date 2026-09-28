@@ -2,7 +2,8 @@ name: CI/CD
 
 # Pipeline (each job is one box in the Actions graph):
 #
-#   lint ──┐   ┌─► integration
+#               ┌─► integration
+#   lint ──┐   ├─► eval (retrieval quality gate)
 #   types ─┼───┤
 #   test ──┘   └─► build ─► smoke ─► publish (main only)
 
@@ -72,6 +73,51 @@ jobs:
           docker compose up -d --wait --wait-timeout 180
       - name: Pytest -m integration (real Postgres + S3, Alembic migrations)
         run: uv run pytest -m integration --no-cov
+
+  eval:
+    name: Eval (retrieval gate)
+    runs-on: ubuntu-24.04
+    needs: [lint, types, test]
+    env:
+      # Only chunks missing from the restored cache are embedded, on a Modal GPU.
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Start infrastructure + embedding server (TEI, BGE-M3)
+        run: |
+          cp .env.example .env
+          docker compose --profile ml up -d --wait --wait-timeout 600
+      - name: Restore embedding cache
+        uses: actions/cache@v6
+        with:
+          path: data/embeddings
+          key: embeddings-bge-m3-${{ hashFiles('src/lexeu/ingestion/**', 'src/lexeu/retrieval/index.py') }}
+          restore-keys: embeddings-bge-m3-
+      - name: Ingest the corpus from Cellar
+        run: |
+          uv run alembic upgrade head
+          uv run lexeu ingest
+          uv run lexeu eval validate
+      - name: Embed missing chunks (Modal GPU) and build the index
+        run: |
+          uv run lexeu index embed
+          uv run lexeu index build
+      - name: Retrieval evaluation with quality gate
+        run: uv run lexeu eval retrieval --gate
+      - name: Publish the report
+        if: always()
+        run: cat eval/reports/retrieval_latest.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: retrieval-report
+          path: eval/reports/
+          if-no-files-found: ignore
 
   build:
     name: Build image
