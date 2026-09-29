@@ -3,7 +3,7 @@ name: CI/CD
 # Pipeline (each job is one box in the Actions graph):
 #
 #               ┌─► integration
-#   lint ──┐   ├─► eval (retrieval quality gate)
+#   lint ──┐   ├─► eval (retrieval + answer quality gates)
 #   types ─┼───┤
 #   test ──┘   └─► build ─► smoke ─► publish (main only)
 
@@ -75,13 +75,15 @@ jobs:
         run: uv run pytest -m integration --no-cov
 
   eval:
-    name: Eval (retrieval gate)
+    name: Eval (retrieval + answer gates)
     runs-on: ubuntu-24.04
     needs: [lint, types, test]
     env:
       # Only chunks missing from the restored cache are embedded, on a Modal GPU.
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      # Answer generation and judge. Without the secret the answer gate is skipped, not failed.
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -109,13 +111,29 @@ jobs:
           uv run lexeu index build
       - name: Retrieval evaluation with quality gate
         run: uv run lexeu eval retrieval --gate
-      - name: Publish the report
+      - name: Restore LLM response cache
+        # Keyed by the exact prompt + sources: only changed questions call the LLM (cost, speed).
+        uses: actions/cache@v6
+        with:
+          path: data/llm
+          key: llm-responses-${{ hashFiles('src/lexeu/generation/**', 'src/lexeu/eval/judge.py', 'eval/golden/*.yaml') }}
+          restore-keys: llm-responses-
+      - name: Answer evaluation with quality gate
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::notice::GEMINI_API_KEY secret not set: answer gate skipped"
+            exit 0
+          fi
+          uv run lexeu eval answers --gate
+      - name: Publish the reports
         if: always()
-        run: cat eval/reports/retrieval_latest.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: |
+          cat eval/reports/retrieval_latest.md >> "$GITHUB_STEP_SUMMARY" || true
+          cat eval/reports/answers_latest.md >> "$GITHUB_STEP_SUMMARY" || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: retrieval-report
+          name: eval-reports
           path: eval/reports/
           if-no-files-found: ignore
 
