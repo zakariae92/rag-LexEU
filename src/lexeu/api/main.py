@@ -11,10 +11,15 @@ from fastapi import FastAPI
 
 from lexeu import __version__
 from lexeu.api.middleware import RequestContextMiddleware
-from lexeu.api.routes import health
+from lexeu.api.routes import ask, health
 from lexeu.core.config import Settings, get_settings
 from lexeu.core.logging import configure_logging
+from lexeu.generation.answer import Answerer
+from lexeu.generation.factory import MissingApiKeyError, make_llm
 from lexeu.infra.resources import Resources
+from lexeu.retrieval.embeddings import TeiEmbedder
+from lexeu.retrieval.search import Retriever
+from lexeu.retrieval.sparse import detect_lang
 
 log = structlog.get_logger(__name__)
 
@@ -28,10 +33,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resources = Resources.create(settings)
         app.state.resources = resources
         app.state.probes = resources.probes()
+        embedder = TeiEmbedder(settings.embeddings.url, settings.embeddings.model_id)
+        app.state.answerer = _answerer(settings, resources, embedder)
         log.info("startup", env=settings.env, version=__version__)
         try:
             yield
         finally:
+            await embedder.aclose()
             await resources.close()
             log.info("shutdown")
 
@@ -44,4 +52,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.add_middleware(RequestContextMiddleware)
     app.include_router(health.router)
+    app.include_router(ask.router)
     return app
+
+
+def _answerer(settings: Settings, resources: Resources, embedder: TeiEmbedder) -> Answerer | None:
+    """Without an LLM key the API still serves health checks; /v1/ask answers 503."""
+    try:
+        llm, _ = make_llm(settings)
+    except MissingApiKeyError as exc:
+        log.warning("generation_disabled", reason=str(exc))
+        return None
+    retriever = Retriever(resources.qdrant, embedder, settings.retrieval)
+    detect_lang("warm-up")  # loads the language models now, not on the first user's request
+    return Answerer(
+        retriever, llm, k=settings.generation.k, expand_chars=settings.generation.expand_chars
+    )
