@@ -5,7 +5,9 @@ from lexeu.generation.answer import Answer, Citation
 
 
 class FakeAnswerer:
-    async def answer(self, question: str, lang: str | None = None) -> Answer:
+    async def answer(
+        self, question: str, lang: str | None = None, history: object = None
+    ) -> Answer:
         return Answer(
             question=question,
             lang=lang or "en",
@@ -48,14 +50,20 @@ def test_ask_returns_answer_citations_and_usage(app: FastAPI, client: TestClient
 
 
 def test_ask_validates_the_request(client: TestClient) -> None:
-    assert client.post("/v1/ask", json={"question": "x"}).status_code == 422
+    assert client.post("/v1/ask", json={"question": ""}).status_code == 422
+    bad_turn = {"question": "And under DORA?", "history": [{"role": "system", "content": "x"}]}
+    assert client.post("/v1/ask", json=bad_turn).status_code == 422
+    too_long = [{"role": "user", "content": "q"}] * 21
+    assert client.post("/v1/ask", json={"question": "Why?", "history": too_long}).status_code == 422
     assert (
         client.post("/v1/ask", json={"question": "Valid question", "lang": "de"}).status_code == 422
     )
 
 
 class FailingAnswerer:
-    async def answer(self, question: str, lang: str | None = None) -> Answer:
+    async def answer(
+        self, question: str, lang: str | None = None, history: object = None
+    ) -> Answer:
         raise TimeoutError("provider timed out")
 
 

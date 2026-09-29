@@ -16,7 +16,7 @@ from tests.unit.test_generation import SOURCES, FakeRetriever
 # ----------------------------------------------------------------------------- JSON field stream
 
 PAYLOAD = json.dumps(
-    {"answerable": True, "answer": 'Within "72 hours" [1].\nSee\tArt. 33 — délai [2].'},
+    {"kind": "answer", "answer": 'Within "72 hours" [1].\nSee\tArt. 33 — délai [2].'},
     ensure_ascii=True,  # \u escapes for the accented characters and the dash
 )
 
@@ -30,12 +30,12 @@ def test_field_is_decoded_whatever_the_chunk_boundaries(size: int) -> None:
 
 def test_a_longer_key_with_the_same_prefix_is_not_the_field() -> None:
     stream = JsonFieldStream("answer")
-    assert stream.feed('{"answerable": true, ') == ""
+    assert stream.feed('{"kind": "answer", ') == ""
     assert stream.feed('"answer": "ok"}') == "ok"
 
 
 def test_nothing_is_emitted_for_an_empty_answer() -> None:
-    assert JsonFieldStream("answer").feed('{"answerable": false, "answer": ""}') == ""
+    assert JsonFieldStream("answer").feed('{"kind": "not_in_sources", "answer": ""}') == ""
 
 
 # ----------------------------------------------------------------------------- answerer
@@ -64,7 +64,7 @@ async def _events(payload: dict[str, object]) -> list[object]:
 
 
 async def test_stream_sends_sources_then_text_then_the_checked_answer() -> None:
-    events = await _events({"answerable": True, "answer": "Within 72 hours [1]."})
+    events = await _events({"kind": "answer", "answer": "Within 72 hours [1]."})
     assert isinstance(events[0], Sources) and len(events[0].hits) == 2
     deltas = [e.text for e in events if isinstance(e, Delta)]
     assert len(deltas) > 1 and "".join(deltas) == "Within 72 hours [1]."
@@ -74,7 +74,7 @@ async def test_stream_sends_sources_then_text_then_the_checked_answer() -> None:
 
 
 async def test_a_streamed_draft_can_end_as_a_refusal() -> None:
-    events = await _events({"answerable": True, "answer": "Always allowed [9]."})
+    events = await _events({"kind": "answer", "answer": "Always allowed [9]."})
     assert "".join(e.text for e in events if isinstance(e, Delta)) == "Always allowed [9]."
     final = events[-1]
     assert isinstance(final, Answer) and final.refused and final.refusal_reason == "ungrounded"
@@ -88,7 +88,9 @@ class StreamingAnswerer(FakeAnswerer):
     def __init__(self, fail: bool = False) -> None:
         self.fail = fail
 
-    async def stream(self, question: str, lang: str | None = None) -> AsyncIterator[object]:
+    async def stream(
+        self, question: str, lang: str | None = None, history: object = None
+    ) -> AsyncIterator[object]:
         yield Sources(SOURCES)
         yield Delta("Within 72 ")
         if self.fail:

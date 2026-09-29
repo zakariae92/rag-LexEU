@@ -8,6 +8,7 @@ from lexeu.eval.answers import AnswerReport, check_gate, evaluate_answers, to_ma
 from lexeu.eval.golden import GoldenItem
 from lexeu.eval.judge import Judge
 from lexeu.generation.answer import Answerer
+from lexeu.generation.conversation import Rewrite, Turn
 from lexeu.generation.llm import Completion, Messages
 from lexeu.retrieval.search import Hit
 
@@ -32,10 +33,10 @@ ITEMS = [
 
 # What the fake generator says for each question.
 SCRIPT = {
-    "Breach deadline?": {"answerable": True, "answer": "Within 72 hours [1]."},
-    "What are the principles?": {"answerable": False, "answer": ""},  # false refusal
-    "Quelle TVA en Belgique ?": {"answerable": False, "answer": ""},  # correct refusal
-    "Who won the 2022 cup?": {"answerable": True, "answer": "See Article 5 [2]."},  # hallucination
+    "Breach deadline?": {"kind": "answer", "answer": "Within 72 hours [1]."},
+    "What are the principles?": {"kind": "not_in_sources", "answer": ""},  # false refusal
+    "Quelle TVA en Belgique ?": {"kind": "not_in_sources", "answer": ""},  # correct refusal
+    "Who won the 2022 cup?": {"kind": "answer", "answer": "See Article 5 [2]."},  # hallucination
 }  # fmt: skip
 
 
@@ -100,7 +101,7 @@ class FlakyAnswerer:
     def __init__(self) -> None:
         self.inner = Answerer(Retriever(), ScriptedLlm(), k=8)  # type: ignore[arg-type]
 
-    async def answer(self, question: str, lang: str | None = None) -> Any:
+    async def answer(self, question: str, lang: str | None = None, history: object = None) -> Any:
         if question == "What are the principles?":
             raise TimeoutError("provider timed out")
         return await self.inner.answer(question, lang)
@@ -119,3 +120,51 @@ async def test_one_failure_does_not_abort_the_run() -> None:
     assert report.overall["judge_error_rate"] == 1.0
     assert "correct" not in report.overall  # nothing could be judged
     assert "Errors (not scored)" in to_markdown(report)
+
+
+# ----------------------------------------------------------------------------- conversations
+
+CHAT_ITEMS = [
+    GoldenItem(id="chat-001", lang="en", category="conversation", question="Hi!",
+               answerable=False, reference="Greets and says what it covers."),
+    GoldenItem(id="chat-002", lang="en", category="conversation", question="Who are you?",
+               answerable=False, reference="Introduces itself."),
+    GoldenItem(id="off-001", lang="en", category="out_of_scope", question="A crêpe recipe, please",
+               answerable=False, reference="Out of scope."),
+    GoldenItem(id="fu-001", lang="en", category="follow_up", question="And for processors?",
+               expected=[ART33], reference="Art. 33.",
+               history=[Turn(role="user", content="Breach deadline?"),
+                        Turn(role="assistant", content="72 hours [1].")]),
+]  # fmt: skip
+
+CHAT_SCRIPT = {
+    "Hi!": {"kind": "conversation", "answer": "Hello! Ask me about EU digital regulation."},
+    "Who are you?": {"kind": "out_of_scope", "answer": ""},  # small talk not recognised
+    "A crêpe recipe, please": {"kind": "out_of_scope", "answer": ""},
+    "What is the breach deadline for processors?": {"kind": "answer", "answer": "Art. 33 [1]."},
+}
+
+
+class ChatLlm:
+    model_id = "fake/gen"
+
+    async def complete(self, messages: Messages, schema: type[BaseModel]) -> Completion:
+        if schema is Rewrite:
+            rewritten = "What is the breach deadline for processors?"
+            return Completion(json.dumps({"question": rewritten}), self.model_id, 1, 1, 0.0, 1.0)
+        question = messages[-1]["content"].split("Question: ")[-1]
+        return Completion(json.dumps(CHAT_SCRIPT[question]), self.model_id, 1, 1, 0.0, 1.0)
+
+
+async def test_small_talk_off_topic_and_follow_up_metrics() -> None:
+    answerer = Answerer(Retriever(), ChatLlm(), k=8)  # type: ignore[arg-type]
+    report = await evaluate_answers(CHAT_ITEMS, answerer, judge=None, concurrency=2)
+    o = report.overall
+    assert o["conversation_rate"] == 0.5  # "Who are you?" was taken for an off-topic request
+    assert o["out_of_scope_recall"] == 1.0
+    assert o["refusal_recall"] == 1.0  # small talk is not counted as a question to refuse
+    follow_up = next(i for i in report.items if i.id == "fu-001")
+    assert follow_up.standalone_question == "What is the breach deadline for processors?"
+    assert follow_up.citation_hit is True
+    md = to_markdown(report)
+    assert "Small talk not recognised (1)" in md and "`chat-002`" in md

@@ -22,13 +22,14 @@ import structlog
 from redis.asyncio import Redis
 
 from lexeu.generation.answer import Answer, Answerer, Citation, Sources, StreamEvent
+from lexeu.generation.conversation import Turn
 from lexeu.observability import spans
 from lexeu.retrieval.search import Hit
 from lexeu.retrieval.sparse import detect_lang
 
 log = structlog.get_logger(__name__)
 
-CACHEABLE_REFUSALS = {"no_sources", "not_in_sources"}  # model glitches are never cached
+CACHEABLE_REFUSALS = {"no_sources", "out_of_scope", "not_in_sources"}  # never model glitches
 # Typographic quotes and guillemets as plain quotes: "l'IA" typed either way is one question.
 _QUOTES = str.maketrans(
     {chr(c): "'" for c in (0x2018, 0x2019)} | {chr(c): '"' for c in (0x201C, 0x201D, 0xAB, 0xBB)}
@@ -82,6 +83,7 @@ def _dump(a: Answer) -> str:
             ],
             "model": a.model,
             "prompt_version": a.prompt_version,
+            "conversation": a.conversation,
         },
         ensure_ascii=False,
     )
@@ -101,6 +103,7 @@ def _load(raw: bytes | str, question: str) -> Answer:
         ],
         model=d["model"],
         prompt_version=d["prompt_version"],
+        conversation=d.get("conversation", False),
         cached=True,  # tokens and cost stay 0: a cache hit calls no model
     )
 
@@ -112,7 +115,11 @@ class CachingAnswerer:
         self._inner = inner
         self._cache = cache
 
-    async def answer(self, question: str, lang: str | None = None) -> Answer:
+    async def answer(
+        self, question: str, lang: str | None = None, history: list[Turn] | None = None
+    ) -> Answer:
+        if history:  # a follow-up means something else in every conversation: never cached
+            return await self._inner.answer(question, lang=lang, history=history)
         start = time.perf_counter()
         lang = lang or detect_lang(question)
         if (hit := await self._get(question, lang, start)) is not None:
@@ -121,7 +128,13 @@ class CachingAnswerer:
         await self._put(answer)
         return answer
 
-    async def stream(self, question: str, lang: str | None = None) -> AsyncIterator[StreamEvent]:
+    async def stream(
+        self, question: str, lang: str | None = None, history: list[Turn] | None = None
+    ) -> AsyncIterator[StreamEvent]:
+        if history:
+            async for event in self._inner.stream(question, lang=lang, history=history):
+                yield event
+            return
         start = time.perf_counter()
         lang = lang or detect_lang(question)
         if (hit := await self._get(question, lang, start)) is not None:

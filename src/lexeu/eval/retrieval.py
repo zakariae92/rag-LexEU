@@ -63,6 +63,10 @@ async def evaluate_retrieval(
 ) -> RetrievalReport:
     results: list[ItemResult] = []
     for item in items:
+        # A follow-up is only a question once rewritten with its conversation, and small talk is
+        # no question at all: both are evaluated end to end (eval answers), not here.
+        if item.history or item.category == "conversation":
+            continue
         start = time.perf_counter()
         hits = await retriever.search(item.question, k=k)
         latency = (time.perf_counter() - start) * 1000

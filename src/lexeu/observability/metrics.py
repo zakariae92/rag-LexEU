@@ -19,7 +19,7 @@ HTTP_LATENCY = Histogram(
 ANSWERS = Counter(
     "lexeu_answers_total",
     "Answers served",
-    ["outcome", "reason", "cache", "lang"],  # outcome: answered | refused
+    ["outcome", "reason", "cache", "lang"],  # outcome: answered | refused | conversation
 )
 ANSWER_LATENCY = Histogram(
     "lexeu_answer_stage_seconds",
@@ -38,14 +38,17 @@ SHED_REQUESTS = Counter("lexeu_shed_total", "Requests refused by admission contr
 
 def record_answer(answer: Answer) -> None:
     cache = "hit" if answer.cached else "miss"
+    outcome = "refused" if answer.refused else "answered"
+    if answer.conversation:
+        outcome = "conversation"
     ANSWERS.labels(
-        outcome="refused" if answer.refused else "answered",
+        outcome=outcome,
         reason=answer.refusal_reason or "none",
         cache=cache,
         lang=answer.lang,
     ).inc()
     for stage, ms in answer.timings_ms.items():
-        if stage in ("retrieval", "generation", "first_token", "total"):
+        if stage in ("rewrite", "retrieval", "generation", "first_token", "total"):
             ANSWER_LATENCY.labels(stage=stage, cache=cache).observe(ms / 1000)
     if not answer.cached:  # a cache hit calls no model
         LLM_TOKENS.labels(model=answer.model, kind="input").inc(answer.input_tokens)

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from lexeu.api.admission import Admission, Overloaded
 from lexeu.api.deps import Caller, caller
 from lexeu.generation.answer import Answer, Answerer, Delta, Sources
+from lexeu.generation.conversation import Turn
 from lexeu.infra.answer_cache import CachingAnswerer
 from lexeu.infra.answer_log import AnswerLog
 from lexeu.infra.api_keys import ApiKey
@@ -26,9 +27,15 @@ log = structlog.get_logger(__name__)
 
 
 class AskRequest(BaseModel):
-    question: str = Field(min_length=3, max_length=2000)
+    question: str = Field(min_length=1, max_length=2000)
     lang: Literal["en", "fr"] | None = Field(
         default=None, description="Answer language; detected from the question when omitted."
+    )
+    history: list[Turn] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Earlier turns of the conversation, oldest first; the server keeps no "
+        "session. A follow-up is rewritten as a standalone question from the last few turns.",
     )
 
 
@@ -67,6 +74,8 @@ class AskResponse(BaseModel):
     usage: Usage
     timings_ms: dict[str, float]
     prompt_version: str
+    conversation: bool  # small talk: no citations
+    standalone_question: str | None  # how a follow-up was understood (rewritten for retrieval)
 
     @classmethod
     def from_answer(cls, answer_id: str, a: Answer) -> "AskResponse":
@@ -94,6 +103,8 @@ class AskResponse(BaseModel):
             ),
             timings_ms=a.timings_ms,
             prompt_version=a.prompt_version,
+            conversation=a.conversation,
+            standalone_question=a.standalone_question,
         )
 
 
@@ -108,7 +119,7 @@ async def ask(
     admission: Admission = request.app.state.admission
     await _admit(admission)
     try:
-        answer = await answerer.answer(body.question, lang=body.lang)
+        answer = await answerer.answer(body.question, lang=body.lang, history=body.history)
     except Exception as exc:  # provider timeout, quota, outage: retryable, not a server bug
         log.error("answer_failed", error=f"{type(exc).__name__}: {str(exc)[:300]}")
         metrics.LLM_ERRORS.labels(error=type(exc).__name__).inc()
@@ -153,7 +164,7 @@ async def ask_stream(
     async def _events() -> AsyncIterator[str]:
         final: Answer | None = None
         try:
-            async for event in answerer.stream(body.question, lang=body.lang):
+            async for event in answerer.stream(body.question, lang=body.lang, history=body.history):
                 if isinstance(event, Sources):
                     sources = [
                         {
@@ -224,6 +235,8 @@ def _log_answer(answer_id: str, answer: Answer) -> None:
         refused=answer.refused,
         refusal_reason=answer.refusal_reason,
         citations=len(answer.citations),
+        conversation=answer.conversation,
+        follow_up=answer.standalone_question is not None,
         model=answer.model,
         cost_usd=answer.cost_usd,
         cache_hit=answer.cached,

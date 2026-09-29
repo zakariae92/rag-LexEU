@@ -57,7 +57,7 @@ def _caching(llm: Any, redis: DictRedis) -> CachingAnswerer:
 
 
 async def test_second_identical_question_is_served_from_cache() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "Within 72 hours [1]."})
+    llm = FakeLlm({"kind": "answer", "answer": "Within 72 hours [1]."})
     redis = DictRedis()
     cached = _caching(llm, redis)
 
@@ -72,7 +72,7 @@ async def test_second_identical_question_is_served_from_cache() -> None:
 
 
 async def test_languages_do_not_share_entries() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "Within 72 hours [1]."})
+    llm = FakeLlm({"kind": "answer", "answer": "Within 72 hours [1]."})
     cached = _caching(llm, DictRedis())
     await cached.answer("GDPR", lang="en")
     await cached.answer("GDPR", lang="fr")
@@ -80,7 +80,7 @@ async def test_languages_do_not_share_entries() -> None:
 
 
 async def test_model_glitches_are_not_cached() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "Uncited claim [9]."})  # -> ungrounded refusal
+    llm = FakeLlm({"kind": "answer", "answer": "Uncited claim [9]."})  # -> ungrounded refusal
     redis = DictRedis()
     answer = await _caching(llm, redis).answer("Anything?", lang="en")
     assert answer.refusal_reason == "ungrounded"
@@ -88,13 +88,13 @@ async def test_model_glitches_are_not_cached() -> None:
 
 
 async def test_a_cache_outage_falls_back_to_the_model() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "Within 72 hours [1]."})
+    llm = FakeLlm({"kind": "answer", "answer": "Within 72 hours [1]."})
     answer = await _caching(llm, DictRedis(broken=True)).answer("Breach deadline?", lang="en")
     assert not answer.refused and len(llm.calls) == 1
 
 
 async def test_streaming_hit_replays_sources_and_answer() -> None:
-    llm = StreamingLlm({"answerable": True, "answer": "Within 72 hours [1]."})
+    llm = StreamingLlm({"kind": "answer", "answer": "Within 72 hours [1]."})
     redis = DictRedis()
     cached = _caching(llm, redis)
     first = [e async for e in cached.stream("Breach deadline?", lang="en")]

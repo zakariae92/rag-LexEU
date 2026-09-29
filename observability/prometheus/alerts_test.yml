@@ -81,6 +81,20 @@ tests:
             exp_annotations:
               summary: "10% of generations fail (timeouts, quota)"
 
+  # Visitors asking off-topic questions or chatting is not a failure: no alert.
+  - interval: 1m
+    input_series:
+      - series: 'lexeu_answers_total{outcome="refused", reason="out_of_scope", cache="miss", lang="en"}'
+        values: "0+6x60"
+      - series: 'lexeu_answers_total{outcome="conversation", reason="none", cache="miss", lang="en"}'
+        values: "0+6x60"
+      - series: 'lexeu_answers_total{outcome="answered", reason="none", cache="miss", lang="en"}'
+        values: "0+4x60"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: LexeuRefusalRateHigh
+        exp_alerts: []
+
   # A spike of refusals with real traffic fires; the same ratio on two questions would not.
   - interval: 1m
     input_series:

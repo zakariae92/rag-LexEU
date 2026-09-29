@@ -2,13 +2,16 @@
 
 Deterministic metrics (primary, free to compute):
 - refusal_recall: share of unanswerable questions the system refuses ("I don't know" works)
-- false_refusal_rate: share of answerable questions it wrongly refuses
+- false_refusal_rate: share of answerable questions it wrongly refuses (or treats as small talk)
 - citation_hit: answered questions whose citations include an expected provision
 - citation_precision: share of cited provisions that are expected ones (a lower bound: citing a
   relevant provision the golden set does not list counts against it)
 - retrieval_hit: an expected provision was among the sources (separates retrieval from
   generation failures)
 - invalid_citation_rate, uncited_sentence_ratio: grounding hygiene
+- conversation_rate: small talk answered as small talk (not refused, not "answered" with law)
+- out_of_scope_recall: off-topic requests refused as out of scope
+Follow-ups are asked with their `history`: the whole path, rewrite included, is measured.
 LLM judge (second signal): correct, correct_or_partial, faithful.
 Operations: latency p50/p95 end to end, cost and tokens per question.
 """
@@ -42,6 +45,8 @@ class AnswerItem:
     answer: str
     refused: bool
     refusal_reason: str | None
+    conversation: bool
+    standalone_question: str | None
     cited: list[str]
     sources: list[str]
     retrieval_hit: bool | None
@@ -97,13 +102,15 @@ async def evaluate_answers(
         async with sem:
             start = time.perf_counter()
             try:
-                answer = await answerer.answer(item.question, lang=item.lang)
+                answer = await answerer.answer(
+                    item.question, lang=item.lang, history=item.history or None
+                )
             except Exception as exc:
                 result = _error_item(item, exc, (time.perf_counter() - start) * 1000)
             else:
                 model = answer.model
                 verdict, judge_cost, judge_error = None, 0.0, None
-                if judge is not None and not answer.refused:
+                if judge is not None and not answer.refused and not answer.conversation:
                     try:
                         verdict, completion = await judge.grade(answer, item.reference)
                         judge_cost = completion.cost_usd
@@ -136,7 +143,8 @@ def _error_item(item: GoldenItem, exc: BaseException, latency_ms: float) -> Answ
     return AnswerItem(
         id=item.id, lang=item.lang, category=item.category, answerable=item.answerable,
         question=item.question, reference=item.reference, expected=item.expected, answer="",
-        refused=False, refusal_reason=None, cited=[], sources=[], retrieval_hit=None,
+        refused=False, refusal_reason=None, conversation=False, standalone_question=None,
+        cited=[], sources=[], retrieval_hit=None,
         citation_hit=None, citation_precision=None, invalid_citations=0, uncited_ratio=0.0,
         correctness=None, faithful=None, judge_reason=None, latency_ms=round(latency_ms, 1),
         retrieval_ms=0.0, generation_ms=0.0, cost_usd=0.0, input_tokens=0, output_tokens=0,
@@ -162,6 +170,8 @@ def _item(
         answer=a.text,
         refused=a.refused,
         refusal_reason=a.refusal_reason,
+        conversation=a.conversation,
+        standalone_question=a.standalone_question,
         cited=cited,
         sources=sources,
         retrieval_hit=(
@@ -192,16 +202,23 @@ def _rate(values: list[bool]) -> float | None:
 
 def _metrics(all_results: list[AnswerItem]) -> dict[str, float]:
     results = [r for r in all_results if r.error is None]
-    unanswerable = [r for r in results if not r.answerable]
+    # Small talk is neither a question to refuse nor one to answer from the law.
+    unanswerable = [r for r in results if not r.answerable and r.category != "conversation"]
     answerable = [r for r in results if r.answerable]
-    answered = [r for r in results if not r.refused]
+    answered = [r for r in results if not r.refused and not r.conversation]
     judged = [r for r in answered if r.answerable and r.correctness is not None]
     candidates: dict[str, float | None] = {
         "n": len(results),
         "error_rate": _rate([r.error is not None for r in all_results]),
         "judge_error_rate": _rate([r.judge_error is not None for r in results if not r.refused]),
         "refusal_recall": _rate([r.refused for r in unanswerable]),
-        "false_refusal_rate": _rate([r.refused for r in answerable]),
+        "false_refusal_rate": _rate([r.refused or r.conversation for r in answerable]),
+        "conversation_rate": _rate(
+            [r.conversation for r in results if r.category == "conversation"]
+        ),
+        "out_of_scope_recall": _rate(
+            [r.refusal_reason == "out_of_scope" for r in results if r.category == "out_of_scope"]
+        ),
         "retrieval_hit": _rate([r.retrieval_hit for r in results if r.retrieval_hit is not None]),
         "citation_hit": _rate([r.citation_hit for r in results if r.citation_hit is not None]),
         "citation_precision": (
@@ -260,6 +277,8 @@ def _cost(results: list[AnswerItem]) -> dict[str, float]:
 _COLUMNS = [
     ("refusal_recall", "refuse (unanswerable)"),
     ("false_refusal_rate", "false refusal"),
+    ("conversation_rate", "small talk"),
+    ("out_of_scope_recall", "off-topic refused"),
     ("retrieval_hit", "retrieval hit"),
     ("citation_hit", "citation hit"),
     ("citation_precision", "citation precision"),
@@ -303,7 +322,26 @@ def to_markdown(report: AnswerReport, title: str = "Answer evaluation") -> str:
 
 def _failures(items: list[AnswerItem]) -> list[str]:
     sections = [
-        ("Answered although not answerable", [i for i in items if not (i.answerable or i.refused)]),
+        (
+            "Answered although not answerable",
+            [i for i in items if not (i.answerable or i.refused) and i.category != "conversation"],
+        ),
+        (
+            "Small talk not recognised",
+            [i for i in items if i.category == "conversation" and not i.conversation],
+        ),
+        (
+            "Off-topic not refused as such",
+            [
+                i
+                for i in items
+                if i.category == "out_of_scope" and i.refusal_reason != "out_of_scope"
+            ],
+        ),
+        (
+            "Legal question treated as small talk",
+            [i for i in items if i.answerable and i.conversation],
+        ),
         ("Refused although answerable", [i for i in items if i.answerable and i.refused]),
         ("Judged incorrect", [i for i in items if i.correctness == "incorrect"]),
         ("Judged unfaithful", [i for i in items if i.faithful is False]),
@@ -316,6 +354,8 @@ def _failures(items: list[AnswerItem]) -> list[str]:
         out += ["", f"### {title} ({len(rows)})", ""]
         for i in rows:
             detail = i.judge_reason or i.refusal_reason or i.answer[:160].replace("\n", " ")
+            if i.standalone_question:
+                detail = f"(understood as: {i.standalone_question}) {detail}"
             hit = "" if i.retrieval_hit is None else f" (source retrieved: {i.retrieval_hit})"
             out.append(f"- `{i.id}` {i.question}{hit}: {detail}")
     return out

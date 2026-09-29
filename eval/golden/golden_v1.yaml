@@ -7,6 +7,7 @@
 # A retrieved chunk is relevant if its provision_key equals or starts with an expected key.
 #
 # Categories: lookup | definition | obligation | temporal | cross_regulation | unanswerable | false_premise
+#             | follow_up (asked after `history` turns) | conversation (small talk) | out_of_scope
 # `answerable: false` -> the corpus does not contain the answer; the system must say so (M4).
 # `status: draft` -> written against the source text, awaiting human review (`lexeu eval review`).
 
@@ -1036,3 +1037,207 @@ items:
     question: Pourquoi le DSA ne s'applique-t-il qu'aux plateformes de plus de 10 millions d'utilisateurs ?
     expected: ["32022R2065:art_33:p1"]
     reference: La prémisse est fausse ; le DSA s'applique à tous les services intermédiaires, et le seuil des très grandes plateformes est de 45 millions (art. 33, par. 1).
+
+  # ------------------------------------------------------------------ conversation (small talk)
+  # Expect a short reply without citations: neither a refusal nor a legal answer.
+  - id: chat-001
+    lang: en
+    category: conversation
+    question: Hello!
+    answerable: false
+    reference: Greets the user, says it answers questions on the covered EU regulations, invites a question.
+  - id: chat-002
+    lang: fr
+    category: conversation
+    question: Bonjour
+    answerable: false
+    reference: Salue, présente ce qu'il couvre, invite à poser une question.
+  - id: chat-003
+    lang: en
+    category: conversation
+    question: Who are you and what can you do?
+    answerable: false
+    reference: Introduces itself as an assistant for the covered EU digital regulations, answering from the official texts.
+  - id: chat-004
+    lang: fr
+    category: conversation
+    question: Qu'est-ce que tu sais faire ?
+    answerable: false
+    reference: Explique qu'il répond aux questions sur le RGPD, l'AI Act, DORA, NIS 2, le DSA et le Data Act.
+  - id: chat-005
+    lang: en
+    category: conversation
+    question: Thanks, that was really helpful!
+    answerable: false
+    reference: Acknowledges the thanks and offers further help.
+  - id: chat-006
+    lang: fr
+    category: conversation
+    question: Merci beaucoup pour ton aide
+    answerable: false
+    reference: Remercie et propose d'autres questions.
+  - id: chat-007
+    lang: en
+    category: conversation
+    question: Goodbye, see you later
+    answerable: false
+    reference: Says goodbye.
+  - id: chat-008
+    lang: fr
+    category: conversation
+    question: Salut, ça va ?
+    answerable: false
+    reference: Répond poliment et invite à poser une question.
+
+  # ------------------------------------------------------------------ out of scope
+  # Not about the covered regulations: expect the out-of-scope refusal, not an answer.
+  - id: off-001
+    lang: en
+    category: out_of_scope
+    question: What will the weather be like in Paris tomorrow?
+    answerable: false
+    reference: Out of scope (general knowledge).
+  - id: off-002
+    lang: en
+    category: out_of_scope
+    question: Write a Python function that sorts a list of numbers.
+    answerable: false
+    reference: Out of scope (a task unrelated to the regulations).
+  - id: off-003
+    lang: fr
+    category: out_of_scope
+    question: Donne-moi une recette de crêpes.
+    answerable: false
+    reference: Hors sujet.
+  - id: off-004
+    lang: en
+    category: out_of_scope
+    question: Who won the 2018 FIFA World Cup?
+    answerable: false
+    reference: Out of scope (general knowledge).
+  - id: off-005
+    lang: fr
+    category: out_of_scope
+    question: Quelle est la capitale de l'Australie ?
+    answerable: false
+    reference: Hors sujet (culture générale).
+  - id: off-006
+    lang: en
+    category: out_of_scope
+    question: Can you recommend a good laptop for programming?
+    answerable: false
+    reference: Out of scope (product advice).
+  - id: off-007
+    lang: fr
+    category: out_of_scope
+    question: Traduis « bonjour tout le monde » en espagnol.
+    answerable: false
+    reference: Hors sujet (traduction).
+  - id: off-008
+    lang: en
+    category: out_of_scope
+    question: How do I file my income tax return in the United States?
+    answerable: false
+    reference: Out of scope (US tax law).
+
+  # ------------------------------------------------------------------ follow-ups (with history)
+  # Only meaningful with the earlier turns: the system must rewrite them before searching.
+  - id: fu-001
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: Within how many hours must a controller notify a personal data breach to the supervisory authority?
+      - role: assistant
+        content: Without undue delay and, where feasible, within 72 hours of becoming aware of it [1].
+    question: And when must the data subjects themselves be informed?
+    expected: ["32016R0679:art_34:p1"]
+    reference: When the breach is likely to result in a high risk to their rights and freedoms, without undue delay (Art. 34(1) GDPR).
+  - id: fu-002
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: In which cases is a data protection impact assessment mandatory under the GDPR?
+      - role: assistant
+        content: When processing is likely to result in a high risk to the rights and freedoms of natural persons, in particular in the cases listed in Article 35(3) [1][2].
+    question: What must it contain at a minimum?
+    expected: ["32016R0679:art_35:p7"]
+    reference: A description of the processing and its purposes, an assessment of necessity and proportionality, an assessment of the risks, and the measures envisaged to address them (Art. 35(7) GDPR).
+  - id: fu-003
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: When must an organisation designate a data protection officer?
+      - role: assistant
+        content: When processing is carried out by a public authority, or when its core activities involve large-scale regular and systematic monitoring or large-scale processing of special categories of data [1].
+    question: What are its tasks?
+    expected: ["32016R0679:art_39:p1"]
+    reference: Inform and advise, monitor compliance, advise on DPIAs, cooperate with and act as contact point for the supervisory authority (Art. 39(1) GDPR).
+  - id: fu-004
+    lang: fr
+    category: follow_up
+    history:
+      - role: user
+        content: Quelles sont les amendes maximales prévues par le RGPD ?
+      - role: assistant
+        content: Jusqu'à 20 000 000 EUR ou 4 % du chiffre d'affaires annuel mondial total pour les violations les plus graves [1].
+    question: Et dans l'AI Act ?
+    expected: ["32024R1689:art_99"]
+    reference: Jusqu'à 35 000 000 EUR ou 7 % du chiffre d'affaires annuel mondial pour les pratiques interdites, avec des plafonds inférieurs pour les autres manquements (Art. 99 AI Act).
+  - id: fu-005
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: What makes an AI system high-risk under the AI Act?
+      - role: assistant
+        content: An AI system is high-risk if it is a safety component of a product covered by the listed Union harmonisation legislation, or if it falls under one of the areas listed in Annex III [1][2].
+    question: Which obligations do providers of such systems have?
+    expected: ["32024R1689:art_16"]
+    reference: Ensure compliance with the requirements for high-risk systems, have a quality management system, keep documentation and logs, undergo conformity assessment, draw up an EU declaration of conformity, affix the CE marking and register the system, among others (Art. 16 AI Act).
+  - id: fu-006
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: Under DORA, what is an ICT-related incident?
+      - role: assistant
+        content: A single event or a series of linked events unplanned by the financial entity that compromises the security of the network and information systems and has an adverse impact on data or services [1].
+    question: How must major ones be reported?
+    expected: ["32022R2554:art_19"]
+    reference: Financial entities report major ICT-related incidents to the competent authority through an initial notification, an intermediate report and a final report (Art. 19 DORA).
+  - id: fu-007
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: Which entities fall within the scope of the NIS2 Directive?
+      - role: assistant
+        content: Public or private entities of the types listed in Annexes I and II that qualify as medium-sized enterprises or exceed the ceilings for medium-sized enterprises, and certain entities regardless of size [1].
+    question: What cybersecurity measures must they take?
+    expected: ["32022L2555:art_21"]
+    reference: Appropriate and proportionate technical, operational and organisational measures to manage risks, based on an all-hazards approach, including at least those listed in Article 21(2) (Art. 21 NIS2).
+  - id: fu-008
+    lang: fr
+    category: follow_up
+    history:
+      - role: user
+        content: Quelles obligations le DSA impose-t-il aux très grandes plateformes en ligne en matière d'évaluation des risques ?
+      - role: assistant
+        content: Elles doivent recenser, analyser et évaluer de manière diligente tout risque systémique découlant de la conception ou du fonctionnement de leur service [1].
+    question: À quelle fréquence doivent-elles le faire ?
+    expected: ["32022R2065:art_34:p1"]
+    reference: Au moins une fois par an, et en tout état de cause avant de déployer des fonctionnalités susceptibles d'avoir une incidence critique sur les risques (Art. 34, par. 1, DSA).
+  - id: fu-009
+    lang: en
+    category: follow_up
+    history:
+      - role: user
+        content: Within how many hours must a controller notify a personal data breach to the supervisory authority?
+      - role: assistant
+        content: Without undue delay and, where feasible, within 72 hours of becoming aware of it [1].
+    question: And under NIS2, what are the deadlines for reporting a significant incident?
+    expected: ["32022L2555:art_23:p4"]
+    reference: An early warning within 24 hours of becoming aware of the incident, an incident notification within 72 hours, and a final report within one month (Art. 23(4) NIS2).

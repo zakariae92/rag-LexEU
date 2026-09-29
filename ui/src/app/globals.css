@@ -339,3 +339,30 @@ a {
     animation: none;
   }
 }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.new-chat {
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.new-chat:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.understood {
+  margin: -6px 0 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+}

@@ -56,7 +56,7 @@ SOURCES = [
 
 def test_prompt_numbers_sources_and_sets_the_answer_language() -> None:
     system, user = build_messages("Quel est le délai ?", SOURCES, "fr")
-    assert "Answer in French" in system["content"]
+    assert "Always write in French" in system["content"]
     assert "[1] Art. 33(1) GDPR" in user["content"]
     assert "[2] Art. 34(1) GDPR" in user["content"]
     assert user["content"].endswith("Question: Quel est le délai ?")
@@ -90,7 +90,7 @@ def _answerer(llm: FakeLlm, hits: list[Hit] = SOURCES) -> Answerer:
 
 
 async def test_answer_maps_citations_back_to_provisions() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "Within 72 hours [1]; data subjects too [2]."})
+    llm = FakeLlm({"kind": "answer", "answer": "Within 72 hours [1]; data subjects too [2]."})
     a = await _answerer(llm).answer("How fast must a breach be notified?", lang="en")
     assert not a.refused
     assert [c.provision_key for c in a.citations] == [
@@ -102,7 +102,7 @@ async def test_answer_maps_citations_back_to_provisions() -> None:
 
 
 async def test_model_refusal_becomes_a_localised_refusal() -> None:
-    llm = FakeLlm({"answerable": False, "answer": ""})
+    llm = FakeLlm({"kind": "not_in_sources", "answer": ""})
     a = await _answerer(llm).answer("Quelle est la TVA en Belgique ?", lang="fr")
     assert a.refused and a.refusal_reason == "not_in_sources"
     assert a.text == REFUSALS["fr"]
@@ -110,14 +110,14 @@ async def test_model_refusal_becomes_a_localised_refusal() -> None:
 
 
 async def test_uncited_answer_is_refused_as_ungrounded() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "Yes, always, see Article 99 [9]."})
+    llm = FakeLlm({"kind": "answer", "answer": "Yes, always, see Article 99 [9]."})
     a = await _answerer(llm).answer("Is it always allowed?", lang="en")
     assert a.refused and a.refusal_reason == "ungrounded"
     assert a.invalid_citations == [9]
 
 
 async def test_no_sources_skips_the_llm() -> None:
-    llm = FakeLlm({"answerable": True, "answer": "x [1]"})
+    llm = FakeLlm({"kind": "answer", "answer": "x [1]"})
     a = await _answerer(llm, hits=[]).answer("Anything?", lang="en")
     assert a.refused and a.refusal_reason == "no_sources"
     assert llm.calls == []

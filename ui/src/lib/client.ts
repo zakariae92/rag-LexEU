@@ -1,5 +1,5 @@
 import { parseSse } from "./sse";
-import type { Lang, StreamEvent } from "./types";
+import type { HistoryTurn, Lang, StreamEvent } from "./types";
 
 export class AskError extends Error {
   constructor(
@@ -15,12 +15,13 @@ export class AskError extends Error {
 export async function* askStream(
   question: string,
   lang: Lang | null,
+  history: HistoryTurn[],
   signal: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const resp = await fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(lang ? { question, lang } : { question }),
+    body: JSON.stringify({ question, history, ...(lang ? { lang } : {}) }),
     signal,
   });
   if (!resp.ok || !resp.body) {

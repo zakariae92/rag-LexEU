@@ -11,6 +11,7 @@ from typing import Literal, Self
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
+from lexeu.generation.conversation import Turn
 from lexeu.ingestion.corpus import Lang
 
 Category = Literal[
@@ -21,7 +22,11 @@ Category = Literal[
     "cross_regulation",
     "unanswerable",
     "false_premise",
+    "follow_up",  # asked after earlier turns (`history`): only meaningful in context
+    "conversation",  # small talk: expects a reply without citations, not a refusal
+    "out_of_scope",  # not about the covered regulations: expects the out-of-scope refusal
 ]
+NO_LEGAL_ANSWER = {"unanswerable", "conversation", "out_of_scope"}
 ReviewStatus = Literal["draft", "verified", "rejected"]
 
 _KEY_PATTERN = r"^3\d{4}[RLD]\d{4}:(art|rct|anx)_\w+(:(p\d+|u\d+))?$"
@@ -31,19 +36,24 @@ class GoldenItem(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9]+-\d{3}$")
     lang: Lang
     category: Category
-    question: str = Field(min_length=10)
+    question: str = Field(min_length=2)  # "Hi!" is a valid small-talk item
     expected: list[str] = Field(default_factory=list)
     answerable: bool = True
     reference: str
     notes: str | None = None
+    history: list[Turn] = Field(default_factory=list)  # earlier turns, for follow-ups
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
         for key in self.expected:
             if not _matches_pattern(key):
                 raise ValueError(f"{self.id}: malformed provision key {key!r}")
-        if self.category == "unanswerable" and self.answerable:
-            raise ValueError(f"{self.id}: category 'unanswerable' requires answerable: false")
+        if self.category in NO_LEGAL_ANSWER and self.answerable:
+            raise ValueError(f"{self.id}: category {self.category!r} requires answerable: false")
+        if (self.category == "follow_up") != bool(self.history):
+            raise ValueError(f"{self.id}: follow_up items, and only they, carry a history")
+        if self.category != "conversation" and len(self.question) < 10:
+            raise ValueError(f"{self.id}: question too short")
         if self.answerable and not self.expected:
             raise ValueError(f"{self.id}: answerable items need at least one expected provision")
         if not self.answerable and self.expected:

@@ -42,7 +42,7 @@ def _attrs(span: ReadableSpan) -> dict[str, Any]:
     return dict(span.attributes or {})
 
 
-ANSWER = {"answerable": True, "answer": "Within 72 hours [1]."}
+ANSWER = {"kind": "answer", "answer": "Within 72 hours [1]."}
 
 
 async def test_answer_trace_has_retrieval_and_generation_children(

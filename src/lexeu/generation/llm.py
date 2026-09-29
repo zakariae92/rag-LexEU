@@ -219,7 +219,7 @@ class MockLlm:
         self._latency = latency_ms / 1000
         self._first = (first_token_ms if first_token_ms is not None else latency_ms * 0.6) / 1000
         self._content = json.dumps(
-            {"answerable": True, "answer": "Simulated answer for a load test [1]. It cites [2]."}
+            {"kind": "answer", "answer": "Simulated answer for a load test [1]. It cites [2]."}
         )
 
     @property

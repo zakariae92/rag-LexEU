@@ -1,6 +1,6 @@
 """Stream one string field out of a JSON object that arrives in arbitrary chunks.
 
-The model streams `{"answerable": true, "answer": "Within 72 hours [1]..."}`. To show the answer
+The model streams `{"kind": "answer", "answer": "Within 72 hours [1]..."}`. To show the answer
 as it is written, the text of `answer` is decoded (JSON escapes included) while the object is
 still incomplete. The full object is parsed and validated at the end, as for non-streamed calls.
 """

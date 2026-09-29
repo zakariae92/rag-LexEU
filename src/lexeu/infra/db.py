@@ -24,6 +24,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     delete,
+    false,
     func,
     select,
     update,
@@ -146,6 +147,8 @@ class AnswerRow(Base):
     cost_usd: Mapped[float]
     latency_ms: Mapped[dict[str, float]] = mapped_column(JSON)
     cache_hit: Mapped[bool] = mapped_column(default=False)
+    conversation: Mapped[bool] = mapped_column(default=False, server_default=false())
+    standalone_question: Mapped[str | None] = mapped_column(Text)  # a follow-up, as searched
 
 
 class FeedbackRow(Base):

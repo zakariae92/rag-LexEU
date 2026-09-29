@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AnswerView, type Turn } from "@/components/AnswerView";
 import { AskError, askStream } from "@/lib/client";
+import { historyOf } from "@/lib/history";
 import { EXAMPLES, STRINGS, type Strings } from "@/lib/i18n";
 import type { Lang } from "@/lib/types";
 
@@ -29,7 +30,9 @@ export function Chat({ initialLang }: { initialLang: Lang }) {
 
   async function ask(question: string) {
     question = question.trim();
-    if (question.length < 3 || abort.current) return;
+    if (!question || abort.current) return;
+    // Earlier exchanges let the API understand a follow-up ("and under DORA?").
+    const history = historyOf(turns.map((x) => ({ question: x.question, answer: x.final?.answer })));
     const id = ++nextId.current;
     const controller = new AbortController();
     abort.current = controller;
@@ -40,7 +43,7 @@ export function Chat({ initialLang }: { initialLang: Lang }) {
     const coldTimer = setTimeout(() => setSlow(true), 5000);
     try {
       // The answer language follows the question; the UI language is only the interface's.
-      for await (const ev of askStream(question, null, controller.signal)) {
+      for await (const ev of askStream(question, null, history, controller.signal)) {
         clearTimeout(coldTimer);
         setSlow(false);
         if (ev.type === "sources") update(id, () => ({ status: "writing", answerId: ev.answerId, sources: ev.sources }));
@@ -59,6 +62,11 @@ export function Chat({ initialLang }: { initialLang: Lang }) {
     }
   }
 
+  function newChat() {
+    setTurns([]);
+    setInput("");
+  }
+
   return (
     <main className="shell">
       <header className="top">
@@ -67,12 +75,19 @@ export function Chat({ initialLang }: { initialLang: Lang }) {
           <p className="tagline">{t.tagline}</p>
           <p className="acts">{t.acts}</p>
         </div>
-        <div className="lang" role="group" aria-label="Language">
-          {(["en", "fr"] as const).map((l) => (
-            <button key={l} type="button" aria-pressed={lang === l} onClick={() => setLang(l)}>
-              {l.toUpperCase()}
+        <div className="actions">
+          {turns.length > 0 && (
+            <button type="button" className="new-chat" onClick={newChat} disabled={busy}>
+              {t.newChat}
             </button>
-          ))}
+          )}
+          <div className="lang" role="group" aria-label="Language">
+            {(["en", "fr"] as const).map((l) => (
+              <button key={l} type="button" aria-pressed={lang === l} onClick={() => setLang(l)}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -116,7 +131,7 @@ export function Chat({ initialLang }: { initialLang: Lang }) {
         {busy ? (
           <button type="button" onClick={() => abort.current?.abort()}>{t.stop}</button>
         ) : (
-          <button type="submit" disabled={input.trim().length < 3}>{t.ask}</button>
+          <button type="submit" disabled={!input.trim()}>{t.ask}</button>
         )}
       </form>
 

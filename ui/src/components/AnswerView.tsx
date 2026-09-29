@@ -28,11 +28,18 @@ export function AnswerView({ turn, t }: { turn: Turn; t: Strings }) {
   return (
     <article className="turn">
       <p className="question">{turn.question}</p>
+      {turn.final?.standalone_question && (
+        <p className="understood">
+          {t.understoodAs} {turn.final.standalone_question}
+        </p>
+      )}
 
       {turn.status === "searching" && <p className="status pulse">{t.searching}</p>}
       {turn.status === "writing" && !turn.draft && <p className="status pulse">{t.writing}</p>}
 
-      {turn.final?.refused && <p className="badge">{t.refused}</p>}
+      {turn.final?.refused && (
+        <p className="badge">{turn.final.refusal_reason === "out_of_scope" ? t.outOfScope : t.refused}</p>
+      )}
       {text && (
         <div className={`answer${turn.final?.refused ? " refused" : ""}`} aria-live="polite">
           {segment(text).map((s, i) =>

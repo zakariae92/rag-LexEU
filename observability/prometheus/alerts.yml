@@ -9,10 +9,12 @@ groups:
           histogram_quantile(0.95, sum by (le) (
             rate(lexeu_answer_stage_seconds_bucket{stage="total", cache="miss"}[10m])))
 
+      # Over legal questions only: small talk and out-of-scope requests are what visitors
+      # asked, not a failure of retrieval or generation.
       - record: lexeu:refusal_ratio:30m
         expr: >
-          sum(rate(lexeu_answers_total{outcome="refused"}[30m]))
-          / sum(rate(lexeu_answers_total[30m]))
+          sum(rate(lexeu_answers_total{outcome="refused", reason!="out_of_scope"}[30m]))
+          / sum(rate(lexeu_answers_total{outcome!="conversation", reason!="out_of_scope"}[30m]))
 
       - alert: LexeuAnswerLatencyHigh
         expr: lexeu:answer_latency_p95:10m > 2

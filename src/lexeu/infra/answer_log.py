@@ -40,6 +40,8 @@ class AnswerLog:
             cost_usd=answer.cost_usd,
             latency_ms=answer.timings_ms,
             cache_hit=cache_hit,
+            conversation=answer.conversation,
+            standalone_question=answer.standalone_question,
         )
         async with self._session.begin() as s:
             s.add(row)

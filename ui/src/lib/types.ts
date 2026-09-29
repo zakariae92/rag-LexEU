@@ -21,7 +21,11 @@ export type AskResponse = {
   usage: { model: string; input_tokens: number; output_tokens: number; cost_usd: number };
   timings_ms: Record<string, number>;
   prompt_version: string;
+  conversation: boolean; // small talk: no citations
+  standalone_question: string | null; // how a follow-up was understood
 };
+
+export type HistoryTurn = { role: "user" | "assistant"; content: string };
 
 export type StreamEvent =
   | { type: "sources"; answerId: string; sources: Source[] }
