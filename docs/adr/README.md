@@ -12,3 +12,4 @@ Format: [Michael Nygard's ADR template](https://cognitect.com/blog/2011/11/15/do
 | [0005](0005-embeddings-batch-and-online.md) | Embeddings: GPU batch path, CPU online path, shared cache, parity check | Accepted |
 | [0006](0006-retrieval-pipeline.md) | Retrieval chosen by ablation: dense + recital demotion, no online reranker yet | Accepted |
 | [0007](0007-generation.md) | Generation: cited sources, grounding checks, explicit refusals, flash-lite by measurement | Accepted |
+| [0008](0008-serving.md) | Serving: API keys, sliding-window rate limits, SSE streaming, answer log; no semantic cache (measured) | Accepted |

@@ -42,7 +42,7 @@ Key decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr/).
 - [x] **M2 · Evaluation first**: 165-question golden set (EN/FR), retrieval metrics, MLflow, BGE-M3 embeddings (GPU batch + CPU online, parity-checked), blue/green Qdrant index, CI quality gate
 - [x] **M3 · Retrieval**: 14-config ablation (dense, BM25 hybrid, recital policy, cross-encoder rerankers), production config chosen by the numbers, CI gate raised
 - [x] **M4 · Generation**: LiteLLM gateway, cited answers, explicit refusals, grounding checks, LLM judge, CI answer gate (p95 1.6 s, $0.79 per 1,000 questions)
-- [ ] **M5 · Backend**: streaming chat API, auth, rate limiting, semantic cache, feedback
+- [x] **M5 · Backend**: API keys, Redis rate limiting, SSE streaming, answer log and feedback, exact-match answer cache (a semantic cache was measured and rejected)
 - [ ] **M6 · Observability**: Langfuse, OpenTelemetry, Grafana dashboards, alerts, load tests
 - [ ] **M7 · UI & delivery**: Next.js chat, CI eval gate, Terraform deployment
 - [ ] **M8 · Results**: ablation tables, demo video
@@ -186,6 +186,28 @@ uv run lexeu eval answers --mlflow   # answers, refusals, citations, judge, late
 The CI eval job also runs this **answer gate** (thresholds in [`eval/thresholds.yaml`](eval/thresholds.yaml));
 an LLM response cache keeps reruns free when prompts and sources are unchanged.
 Design: [ADR 0007](docs/adr/0007-generation.md).
+
+## Serving (M5)
+
+```bash
+uv run lexeu keys create my-app          # prints the key once; only its hash is stored
+curl -N http://127.0.0.1:8080/v1/ask/stream -H "Authorization: Bearer lx_..."      -H "Content-Type: application/json" -d '{"question": "What must deployers of high-risk AI do?"}'
+```
+
+- **Streaming** (server-sent events): the sources arrive after ~0.5 s, the text from ~1.3 s, the
+  checked answer at the end. The final event is authoritative: a draft that fails the grounding
+  check ends as a refusal.
+- **API keys and rate limits:** keys are stored as hashes. Limits per key use a sliding window in
+  Redis, enforced atomically by a Lua script (50 concurrent requests, limit 10: exactly 10 pass).
+- **Answer log and feedback:** every answer is stored with its citations, latency and cost, after
+  the response is sent; `POST /v1/feedback` rates it.
+- **No semantic cache, by measurement.** Two *different* questions reach 0.98 cosine similarity
+  ("maximum fines for essential entities" vs "... important entities": different amounts), so any
+  threshold that catches paraphrases also serves wrong answers
+  ([study](eval/baselines/m5_semantic_cache.md)). The cache matches the normalised question
+  exactly instead: a repeat costs 1.6 ms and $0, and a new index or prompt invalidates it.
+
+Design: [ADR 0008](docs/adr/0008-serving.md).
 
 ## Project layout
 
