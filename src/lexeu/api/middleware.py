@@ -6,6 +6,8 @@ import uuid
 import structlog
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from lexeu.observability.metrics import HTTP_LATENCY, HTTP_REQUESTS
+
 REQUEST_ID_HEADER = "x-request-id"
 
 log = structlog.get_logger("lexeu.access")
@@ -40,11 +42,16 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_with_id)
         finally:
+            duration = time.perf_counter() - start
+            # Route template ("/v1/ask"), never the raw path: bounded label cardinality.
+            route = getattr(scope.get("route"), "path", "unmatched")
+            HTTP_REQUESTS.labels(method=scope["method"], route=route, status=str(status)).inc()
+            HTTP_LATENCY.labels(route=route).observe(duration)
             log.info(
                 "request",
                 method=scope["method"],
                 path=scope["path"],
                 status=status,
-                duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                duration_ms=round(duration * 1000, 1),
             )
             structlog.contextvars.unbind_contextvars("request_id", "caller")

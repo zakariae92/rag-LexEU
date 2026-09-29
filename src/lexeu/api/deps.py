@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request, Response, status
 
 from lexeu.core.config import Settings
 from lexeu.infra.api_keys import ApiKey
+from lexeu.observability.metrics import RATE_LIMITED
 
 log = structlog.get_logger(__name__)
 
@@ -48,6 +49,7 @@ async def caller(request: Request, response: Response) -> Caller:
     }
     if not decision.allowed:
         log.warning("rate_limited", subject=who.subject, limit=decision.limit)
+        RATE_LIMITED.inc()
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "rate limit exceeded",

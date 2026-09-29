@@ -18,6 +18,7 @@ from lexeu.generation.answer import Answer, Answerer, Delta, Sources
 from lexeu.infra.answer_cache import CachingAnswerer
 from lexeu.infra.answer_log import AnswerLog
 from lexeu.infra.api_keys import ApiKey
+from lexeu.observability import metrics
 
 router = APIRouter(prefix="/v1", tags=["answers"])
 log = structlog.get_logger(__name__)
@@ -90,6 +91,7 @@ async def ask(
         answer = await answerer.answer(body.question, lang=body.lang)
     except Exception as exc:  # provider timeout, quota, outage: retryable, not a server bug
         log.error("answer_failed", error=f"{type(exc).__name__}: {str(exc)[:300]}")
+        metrics.LLM_ERRORS.labels(error=type(exc).__name__).inc()
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "answer generation is temporarily unavailable, please retry",
@@ -134,6 +136,7 @@ async def ask_stream(
                     yield _sse("done", AskResponse.from_answer(answer_id, event).model_dump())
         except Exception as exc:  # headers are sent already: report the failure in the stream
             log.error("answer_failed", error=f"{type(exc).__name__}: {str(exc)[:300]}")
+            metrics.LLM_ERRORS.labels(error=type(exc).__name__).inc()
             yield _sse("error", {"detail": "answer generation is temporarily unavailable"})
             return
         if final is not None:
@@ -165,6 +168,7 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 
 
 def _log_answer(answer_id: str, answer: Answer) -> None:
+    metrics.record_answer(answer)
     log.info(
         "answer",
         answer_id=answer_id,
@@ -208,4 +212,5 @@ async def feedback(
     if not found:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown answer_id")
     log.info("feedback", answer_id=body.answer_id, rating=body.rating)
+    metrics.FEEDBACK.labels(rating="up" if body.rating > 0 else "down").inc()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

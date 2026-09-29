@@ -2,6 +2,8 @@
 
 - `/health`: the process is up. Never touches dependencies.
 - `/ready`:  every backing service answers within the timeout; 503 otherwise.
+- `/metrics`: Prometheus exposition format. Unauthenticated like the probes: in a deployment it is
+  reachable from the monitoring network only, never through the public ingress.
 """
 
 import asyncio
@@ -10,6 +12,7 @@ from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Request, Response, status
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
 from lexeu import __version__
@@ -67,3 +70,8 @@ async def ready(request: Request, response: Response) -> ReadyResponse:
     if not all_up:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return ReadyResponse(status="ready" if all_up else "not_ready", dependencies=deps)
+
+
+@router.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
