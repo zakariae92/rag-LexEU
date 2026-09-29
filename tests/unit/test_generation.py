@@ -173,3 +173,16 @@ def test_cache_key_changes_with_generation_parameters() -> None:
 def test_reasoning_effort_is_only_sent_when_set(effort: str | None) -> None:
     client = LiteLlmClient("gemini/x", reasoning_effort=effort)
     assert ("reasoning_effort" in client.params) == (effort is not None)
+
+
+async def test_load_test_mock_is_explicit_and_answers_with_citations() -> None:
+    from lexeu.core.config import Settings
+    from lexeu.generation.factory import make_llm
+
+    settings = Settings(_env_file=None)
+    settings.generation.mock_latency_ms = 5
+    llm, _ = make_llm(settings)
+    assert llm.model_id == "mock/llm"  # visible as such in metrics and the answer log
+
+    answer = await Answerer(FakeRetriever(SOURCES), llm, k=8).answer("Anything?", lang="en")  # type: ignore[arg-type]
+    assert not answer.refused and [c.n for c in answer.citations] == [1, 2]

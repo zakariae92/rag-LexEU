@@ -4,7 +4,7 @@ Labels stay low-cardinality (route templates, not raw paths; reasons, not questi
 detail belongs in traces and in the answer log, not in metric labels.
 """
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from lexeu.generation.answer import Answer
 
@@ -32,6 +32,8 @@ LLM_COST = Counter("lexeu_llm_cost_usd_total", "LLM cost in USD", ["model"])
 LLM_ERRORS = Counter("lexeu_llm_errors_total", "Failed answer generations", ["error"])
 RATE_LIMITED = Counter("lexeu_rate_limited_total", "Requests refused by the rate limiter")
 FEEDBACK = Counter("lexeu_feedback_total", "User feedback", ["rating"])
+INFLIGHT_ANSWERS = Gauge("lexeu_inflight_answers", "Answers being computed right now")
+SHED_REQUESTS = Counter("lexeu_shed_total", "Requests refused by admission control (overload)")
 
 
 def record_answer(answer: Answer) -> None:

@@ -89,6 +89,15 @@ class GenerationSettings(BaseModel):
     max_retries: int = 3
     concurrency: int = 4  # parallel questions during evaluation (provider rate limits)
     cache_path: str = "data/llm/responses.sqlite"  # evaluation only: identical calls are free
+    # Load tests only: replace the model with a simulated one of this latency. Never in production.
+    mock_latency_ms: float | None = None
+
+
+class ServingSettings(BaseModel):
+    # Answers computed concurrently before new ones wait, then get a 503 (admission control).
+    # Sized from the load test: the CPU embedding server sustains about 6 answers/s (ADR 0009).
+    max_inflight_answers: int = 8
+    queue_timeout_s: float = 1.0
 
 
 class AuthSettings(BaseModel):
@@ -148,6 +157,7 @@ class Settings(BaseSettings):
     retrieval: RetrievalConfig = PRODUCTION_RETRIEVAL
     generation: GenerationSettings = GenerationSettings()
     auth: AuthSettings = AuthSettings()
+    serving: ServingSettings = ServingSettings()
     cache: CacheSettings = CacheSettings()
     tracing: TracingSettings = TracingSettings()
     eval: EvalSettings = EvalSettings()

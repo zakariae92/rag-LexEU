@@ -31,3 +31,6 @@ eval/reports/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Raw Locust output (summaries in loadtests/results/*.md and *.json are kept)
+loadtests/results/*.csv

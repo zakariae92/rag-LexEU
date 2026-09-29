@@ -2,8 +2,12 @@
 
 from pathlib import Path
 
+import structlog
+
 from lexeu.core.config import Settings
-from lexeu.generation.llm import CachedLlm, LiteLlmClient, LlmClient, ResponseCache
+from lexeu.generation.llm import CachedLlm, LiteLlmClient, LlmClient, MockLlm, ResponseCache
+
+log = structlog.get_logger(__name__)
 
 
 class MissingApiKeyError(RuntimeError):
@@ -17,6 +21,9 @@ def make_llm(
     reasoning_effort: str | None = None,
 ) -> tuple[LlmClient, ResponseCache | None]:
     cfg = settings.generation
+    if cfg.mock_latency_ms is not None:
+        log.warning("llm_mocked_for_load_test", latency_ms=cfg.mock_latency_ms)
+        return MockLlm(cfg.mock_latency_ms), None
     model = model or cfg.model
     key = settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None
     if model.startswith("gemini/") and not key:

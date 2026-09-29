@@ -6,6 +6,7 @@ the one shipped with the pinned LiteLLM version (no network fetch at import): co
 reproducible and reviewed like any dependency bump.
 """
 
+import asyncio
 import hashlib
 import json
 import os
@@ -205,3 +206,37 @@ class CachedLlm:
         completion = await self.complete(messages, schema)  # evaluation path: no real streaming
         yield completion.content
         yield completion
+
+
+class MockLlm:
+    """A stand-in model for load tests: fixed latency, a valid cited answer, no provider call.
+
+    Load tests measure our own stack (embedding, search, databases); a real provider would add
+    its own variance and its rate limits (the free tier allows a few requests per minute).
+    """
+
+    def __init__(self, latency_ms: float, first_token_ms: float | None = None) -> None:
+        self._latency = latency_ms / 1000
+        self._first = (first_token_ms if first_token_ms is not None else latency_ms * 0.6) / 1000
+        self._content = json.dumps(
+            {"answerable": True, "answer": "Simulated answer for a load test [1]. It cites [2]."}
+        )
+
+    @property
+    def model_id(self) -> str:
+        return "mock/llm"
+
+    def _completion(self) -> Completion:
+        return Completion(self._content, self.model_id, 2400, 40, 0.0, self._latency * 1000)
+
+    async def complete(self, messages: Messages, schema: type[BaseModel]) -> Completion:
+        await asyncio.sleep(self._latency)
+        return self._completion()
+
+    async def stream(
+        self, messages: Messages, schema: type[BaseModel]
+    ) -> AsyncIterator[str | Completion]:
+        await asyncio.sleep(self._first)
+        yield self._content
+        await asyncio.sleep(self._latency - self._first)
+        yield replace(self._completion(), first_token_ms=self._first * 1000)

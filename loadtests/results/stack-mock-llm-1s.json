@@ -1,0 +1,57 @@
+[
+  {
+    "users": 1,
+    "requests": 18,
+    "failures": 0,
+    "rps": 0.32,
+    "p50_ms": 1200.0,
+    "p95_ms": 1600.0,
+    "p99_ms": 1600.0,
+    "p95_retrieval_ms": 440,
+    "p95_generation_ms": 988
+  },
+  {
+    "users": 5,
+    "requests": 93,
+    "failures": 0,
+    "rps": 1.59,
+    "p50_ms": 1200.0,
+    "p95_ms": 1400.0,
+    "p99_ms": 1600.0,
+    "p95_retrieval_ms": 443,
+    "p95_generation_ms": 988
+  },
+  {
+    "users": 10,
+    "requests": 185,
+    "failures": 0,
+    "rps": 3.11,
+    "p50_ms": 1200.0,
+    "p95_ms": 1600.0,
+    "p99_ms": 2700.0,
+    "p95_retrieval_ms": 469,
+    "p95_generation_ms": 988
+  },
+  {
+    "users": 20,
+    "requests": 315,
+    "failures": 0,
+    "rps": 5.31,
+    "p50_ms": 1500.0,
+    "p95_ms": 3600.0,
+    "p99_ms": 5200.0,
+    "p95_retrieval_ms": 3092,
+    "p95_generation_ms": 987
+  },
+  {
+    "users": 40,
+    "requests": 381,
+    "failures": 0,
+    "rps": 6.4,
+    "p50_ms": 4000.0,
+    "p95_ms": 6400.0,
+    "p99_ms": 9100.0,
+    "p95_retrieval_ms": 4909,
+    "p95_generation_ms": 988
+  }
+]

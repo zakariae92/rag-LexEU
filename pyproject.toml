@@ -123,6 +123,7 @@ source = ["lexeu"]
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
+    "locust>=2.46.6",
     "lxml-stubs>=0.5.1",
     "mypy>=2.3.1",
     "poethepoet>=0.48.0",
