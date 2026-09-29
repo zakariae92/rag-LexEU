@@ -25,9 +25,9 @@ app = typer.Typer(help="rag-LexEU command line.", no_args_is_help=True)
 def _setup() -> None:
     """Every HTTPS client in the CLI (Cellar, HuggingFace, Modal) trusts the OS certificate
     store: works behind corporate proxies and antivirus TLS inspection."""
-    import truststore
+    from lexeu.core.tls import use_system_trust
 
-    truststore.inject_into_ssl()
+    use_system_trust()
 
 
 corpus_app = typer.Typer(help="Inspect the ingested corpus.", no_args_is_help=True)

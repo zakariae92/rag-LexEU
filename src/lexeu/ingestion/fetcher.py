@@ -12,9 +12,9 @@ from dataclasses import dataclass
 
 import httpx
 import structlog
-import truststore
 
 from lexeu.core.config import IngestionSettings
+from lexeu.core.tls import system_ssl_context
 from lexeu.ingestion.corpus import Lang
 
 log = structlog.get_logger(__name__)
@@ -41,7 +41,7 @@ class CellarFetcher:
         self._client = client or httpx.AsyncClient(
             # OS certificate store instead of certifi: works behind corporate proxies and
             # antivirus HTTPS inspection, and uses the system CA bundle in containers.
-            verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            verify=system_ssl_context(),
             timeout=settings.timeout_s,
             follow_redirects=True,
             headers={"User-Agent": settings.user_agent},
