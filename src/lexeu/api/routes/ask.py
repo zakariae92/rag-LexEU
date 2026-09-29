@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from lexeu.api.deps import Caller, caller
 from lexeu.generation.answer import Answer, Answerer, Delta, Sources
+from lexeu.infra.answer_cache import CachingAnswerer
 from lexeu.infra.answer_log import AnswerLog
 from lexeu.infra.api_keys import ApiKey
 
@@ -150,8 +151,8 @@ async def ask_stream(
     )
 
 
-def _answerer(request: Request) -> Answerer:
-    answerer: Answerer | None = getattr(request.app.state, "answerer", None)
+def _answerer(request: Request) -> Answerer | CachingAnswerer:
+    answerer: Answerer | CachingAnswerer | None = getattr(request.app.state, "answerer", None)
     if answerer is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "answer generation is not configured"
@@ -173,6 +174,7 @@ def _log_answer(answer_id: str, answer: Answer) -> None:
         citations=len(answer.citations),
         model=answer.model,
         cost_usd=answer.cost_usd,
+        cache_hit=answer.cached,
         **{f"{k}_ms": v for k, v in answer.timings_ms.items()},
     )
 
@@ -186,6 +188,7 @@ async def _record(
             answer,
             retrieval=request.app.state.settings.retrieval.name,
             api_key_id=key.id if key else None,
+            cache_hit=answer.cached,
         )
     except Exception as exc:  # losing a log line must never break answering
         log.error("answer_log_failed", answer_id=answer_id, error=repr(exc))

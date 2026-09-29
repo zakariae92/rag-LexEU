@@ -97,6 +97,13 @@ class AuthSettings(BaseModel):
     anonymous_rate_limit_per_min: int = 10  # per client IP, when auth is not required
 
 
+class CacheSettings(BaseModel):
+    """Exact-match answer cache (ADR 0008: a similarity-based cache served wrong answers)."""
+
+    enabled: bool = True
+    ttl_s: int = 7 * 24 * 3600  # the law changes slowly; a new index changes the namespace anyway
+
+
 class EvalSettings(BaseModel):
     golden_path: str = "eval/golden/golden_v1.yaml"
     experiments_path: str = "eval/experiments.yaml"
@@ -130,6 +137,7 @@ class Settings(BaseSettings):
     retrieval: RetrievalConfig = PRODUCTION_RETRIEVAL
     generation: GenerationSettings = GenerationSettings()
     auth: AuthSettings = AuthSettings()
+    cache: CacheSettings = CacheSettings()
     eval: EvalSettings = EvalSettings()
 
 

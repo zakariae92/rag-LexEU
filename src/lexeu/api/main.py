@@ -3,6 +3,7 @@
 Run with: uvicorn lexeu.api.main:create_app --factory
 """
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -17,8 +18,11 @@ from lexeu.core.logging import configure_logging
 from lexeu.core.tls import use_system_trust
 from lexeu.generation.answer import Answerer
 from lexeu.generation.factory import MissingApiKeyError, make_llm
+from lexeu.generation.prompt import PROMPT_VERSION
+from lexeu.infra.answer_cache import AnswerCache, CachingAnswerer, namespace
 from lexeu.infra.answer_log import AnswerLog
 from lexeu.infra.api_keys import ApiKeyStore
+from lexeu.infra.db import SqlIndexRegistry
 from lexeu.infra.rate_limit import RateLimiter
 from lexeu.infra.resources import Resources
 from lexeu.retrieval.embeddings import TeiEmbedder
@@ -39,7 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.resources = resources
         app.state.probes = resources.probes()
         embedder = TeiEmbedder(settings.embeddings.url, settings.embeddings.model_id)
-        app.state.answerer = _answerer(settings, resources, embedder)
+        app.state.answerer = await _answerer(settings, resources, embedder)
         app.state.api_keys = ApiKeyStore(resources.db)
         app.state.answer_log = AnswerLog(resources.db)
         app.state.rate_limiter = RateLimiter(resources.redis)
@@ -64,7 +68,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def _answerer(settings: Settings, resources: Resources, embedder: TeiEmbedder) -> Answerer | None:
+async def _answerer(
+    settings: Settings, resources: Resources, embedder: TeiEmbedder
+) -> Answerer | CachingAnswerer | None:
     """Without an LLM key the API still serves health checks; /v1/ask answers 503."""
     try:
         llm, _ = make_llm(settings)
@@ -73,6 +79,18 @@ def _answerer(settings: Settings, resources: Resources, embedder: TeiEmbedder) -
         return None
     retriever = Retriever(resources.qdrant, embedder, settings.retrieval)
     detect_lang("warm-up")  # loads the language models now, not on the first user's request
-    return Answerer(
-        retriever, llm, k=settings.generation.k, expand_chars=settings.generation.expand_chars
-    )
+    gen = settings.generation
+    answerer = Answerer(retriever, llm, k=gen.k, expand_chars=gen.expand_chars)
+    if not settings.cache.enabled:
+        return answerer
+    try:  # the cache namespace pins the live index: a rebuilt index never serves old answers
+        index = await asyncio.wait_for(SqlIndexRegistry(resources.db).active("chunks"), 5)
+    except Exception as exc:
+        log.warning("answer_cache_disabled", reason=repr(exc))
+        return answerer
+    ns = namespace(
+        index.fingerprint if index else None, gen.model, PROMPT_VERSION, settings.retrieval,
+        gen.k, gen.expand_chars, gen.reasoning_effort,
+    )  # fmt: skip
+    log.info("answer_cache_enabled", namespace=ns)
+    return CachingAnswerer(answerer, AnswerCache(resources.redis, ns, settings.cache.ttl_s))
