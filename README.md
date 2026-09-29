@@ -40,7 +40,7 @@ Key decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr/).
 - [x] **M0 · Foundations**: uv project, typed settings, structured logging, FastAPI with health/readiness probes, Docker Compose stack, CI (lint, types, tests, container smoke test)
 - [x] **M1 · Ingestion**: official Cellar API (EN+FR), structure-aware chunking with citations, Postgres registry with lineage, incremental sync, Alembic migrations
 - [x] **M2 · Evaluation first**: 165-question golden set (EN/FR), retrieval metrics, MLflow, BGE-M3 embeddings (GPU batch + CPU online, parity-checked), blue/green Qdrant index, CI quality gate
-- [ ] **M3 · Retrieval**: hybrid search, reranking, cross-reference expansion, ablation table
+- [x] **M3 · Retrieval**: 14-config ablation (dense, BM25 hybrid, recital policy, cross-encoder rerankers), production config chosen by the numbers, CI gate raised
 - [ ] **M4 · Generation**: LiteLLM gateway, citations, refusal, grounding check
 - [ ] **M5 · Backend**: streaming chat API, auth, rate limiting, semantic cache, feedback
 - [ ] **M6 · Observability**: Langfuse, OpenTelemetry, Grafana dashboards, alerts, load tests
@@ -132,6 +132,29 @@ uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
 
 The CI job **Eval (retrieval gate)** rebuilds the index and fails the pipeline if quality
 drops below [`eval/thresholds.yaml`](eval/thresholds.yaml). Design: [ADR 0005](docs/adr/0005-embeddings-batch-and-online.md).
+
+## Retrieval (M3)
+
+Every idea became a config in [`eval/experiments.yaml`](eval/experiments.yaml), and one command
+scores them all on the golden set (`uv run lexeu eval ablation --mlflow`, [full table](eval/baselines/m3_ablation.md)).
+
+| Config | hit@1 | hit@5 | hit@10 | MRR@10 | p95 |
+|---|---|---|---|---|---|
+| dense (M2 baseline) | 0.530 | 0.881 | 0.940 | 0.687 | 25 ms |
+| **dense + recital demotion** (production) | **0.722** | **0.914** | **0.954** | **0.809** | **28 ms** |
+| hybrid dense + BM25 (RRF) | 0.430 | 0.848 | 0.914 | 0.606 | 30 ms |
+| BM25 only | 0.272 | 0.649 | 0.788 | 0.437 | 28 ms |
+| + bge-reranker-v2-m3, top 10 (GPU) | 0.755 | 0.934 | 0.954 | 0.836 | 0.6 s |
+| + bge-reranker-v2-m3, top 30 (GPU) | 0.768 | 0.927 | 0.974 | 0.842 | 2.5 s |
+
+- **One multiplication fixed the top-1 problem.** Scaling recital scores by 0.9 lets the article
+  win close calls: +19 points hit@1 at zero latency. Recitals stay retrievable for context.
+- **Hybrid search made things worse.** EU law repeats the same vocabulary everywhere ("Member
+  States shall"), so BM25 adds noise, even at a 3:1 dense weight. The hypothesis from M2 was wrong,
+  and the ablation says so.
+- **Rerankers help, but not enough to pay for them yet.** +2 points hit@5 for 0.6-2.5 s on a GPU
+  (or 5 s on CPU). Their real asset is a score that separates unanswerable questions; M4 decides
+  whether refusals need it. Design: [ADR 0006](docs/adr/0006-retrieval-pipeline.md).
 
 ## Project layout
 
