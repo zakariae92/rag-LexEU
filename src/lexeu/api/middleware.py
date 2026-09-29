@@ -47,4 +47,4 @@ class RequestContextMiddleware:
                 status=status,
                 duration_ms=round((time.perf_counter() - start) * 1000, 1),
             )
-            structlog.contextvars.unbind_contextvars("request_id")
+            structlog.contextvars.unbind_contextvars("request_id", "caller")

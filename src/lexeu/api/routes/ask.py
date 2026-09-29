@@ -1,12 +1,16 @@
-"""`POST /v1/ask`: a grounded answer with citations, or an explicit refusal."""
+"""`POST /v1/ask`: a grounded answer with citations, or an explicit refusal. `POST /v1/feedback`."""
 
-from typing import Literal
+import uuid
+from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
+from lexeu.api.deps import Caller, caller
 from lexeu.generation.answer import Answer, Answerer
+from lexeu.infra.answer_log import AnswerLog
+from lexeu.infra.api_keys import ApiKey
 
 router = APIRouter(prefix="/v1", tags=["answers"])
 log = structlog.get_logger(__name__)
@@ -34,6 +38,7 @@ class Usage(BaseModel):
 
 
 class AskResponse(BaseModel):
+    answer_id: str  # send it back with /v1/feedback
     answer: str
     lang: str
     refused: bool
@@ -44,8 +49,9 @@ class AskResponse(BaseModel):
     prompt_version: str
 
     @classmethod
-    def from_answer(cls, a: Answer) -> "AskResponse":
+    def from_answer(cls, answer_id: str, a: Answer) -> "AskResponse":
         return cls(
+            answer_id=answer_id,
             answer=a.text,
             lang=a.lang,
             refused=a.refused,
@@ -66,7 +72,12 @@ class AskResponse(BaseModel):
 
 
 @router.post("/ask")
-async def ask(body: AskRequest, request: Request) -> AskResponse:
+async def ask(
+    body: AskRequest,
+    request: Request,
+    background: BackgroundTasks,
+    who: Annotated[Caller, Depends(caller)],
+) -> AskResponse:
     answerer: Answerer | None = getattr(request.app.state, "answerer", None)
     if answerer is None:
         raise HTTPException(
@@ -81,8 +92,12 @@ async def ask(body: AskRequest, request: Request) -> AskResponse:
             "answer generation is temporarily unavailable, please retry",
             headers={"Retry-After": "30"},
         ) from exc
+    answer_id = uuid.uuid4().hex
+    # Logged after the response is sent: the client never waits for the database.
+    background.add_task(_record, request.app.state.answer_log, answer_id, answer, request, who.key)
     log.info(
         "answer",
+        answer_id=answer_id,
         lang=answer.lang,
         refused=answer.refused,
         refusal_reason=answer.refusal_reason,
@@ -91,4 +106,35 @@ async def ask(body: AskRequest, request: Request) -> AskResponse:
         cost_usd=answer.cost_usd,
         **{f"{k}_ms": v for k, v in answer.timings_ms.items()},
     )
-    return AskResponse.from_answer(answer)
+    return AskResponse.from_answer(answer_id, answer)
+
+
+async def _record(
+    answer_log: AnswerLog, answer_id: str, answer: Answer, request: Request, key: ApiKey | None
+) -> None:
+    try:
+        await answer_log.record(
+            answer_id,
+            answer,
+            retrieval=request.app.state.settings.retrieval.name,
+            api_key_id=key.id if key else None,
+        )
+    except Exception as exc:  # losing a log line must never break answering
+        log.error("answer_log_failed", answer_id=answer_id, error=repr(exc))
+
+
+class FeedbackRequest(BaseModel):
+    answer_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    rating: Literal[1, -1] = Field(description="1 = helpful, -1 = not helpful")
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def feedback(
+    body: FeedbackRequest, request: Request, _: Annotated[Caller, Depends(caller)]
+) -> Response:
+    found = await request.app.state.answer_log.feedback(body.answer_id, body.rating, body.comment)
+    if not found:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown answer_id")
+    log.info("feedback", answer_id=body.answer_id, rating=body.rating)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

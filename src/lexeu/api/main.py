@@ -16,6 +16,9 @@ from lexeu.core.config import Settings, get_settings
 from lexeu.core.logging import configure_logging
 from lexeu.generation.answer import Answerer
 from lexeu.generation.factory import MissingApiKeyError, make_llm
+from lexeu.infra.answer_log import AnswerLog
+from lexeu.infra.api_keys import ApiKeyStore
+from lexeu.infra.rate_limit import RateLimiter
 from lexeu.infra.resources import Resources
 from lexeu.retrieval.embeddings import TeiEmbedder
 from lexeu.retrieval.search import Retriever
@@ -35,6 +38,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.probes = resources.probes()
         embedder = TeiEmbedder(settings.embeddings.url, settings.embeddings.model_id)
         app.state.answerer = _answerer(settings, resources, embedder)
+        app.state.api_keys = ApiKeyStore(resources.db)
+        app.state.answer_log = AnswerLog(resources.db)
+        app.state.rate_limiter = RateLimiter(resources.redis)
         log.info("startup", env=settings.env, version=__version__)
         try:
             yield

@@ -91,6 +91,12 @@ class GenerationSettings(BaseModel):
     cache_path: str = "data/llm/responses.sqlite"  # evaluation only: identical calls are free
 
 
+class AuthSettings(BaseModel):
+    required: bool = True  # secure by default; set AUTH__REQUIRED=false for local exploration
+    default_rate_limit_per_min: int = 30  # for new API keys
+    anonymous_rate_limit_per_min: int = 10  # per client IP, when auth is not required
+
+
 class EvalSettings(BaseModel):
     golden_path: str = "eval/golden/golden_v1.yaml"
     experiments_path: str = "eval/experiments.yaml"
@@ -123,6 +129,7 @@ class Settings(BaseSettings):
     embeddings: EmbeddingSettings = EmbeddingSettings()
     retrieval: RetrievalConfig = PRODUCTION_RETRIEVAL
     generation: GenerationSettings = GenerationSettings()
+    auth: AuthSettings = AuthSettings()
     eval: EvalSettings = EvalSettings()
 
 

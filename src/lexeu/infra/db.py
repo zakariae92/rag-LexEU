@@ -4,6 +4,9 @@
   parser version and chunking config. This is what makes incremental sync possible.
 - `chunks`: the processed zone, the input of indexing and evaluation.
 - `ingestion_runs`: an audit trail of every sync (when, what changed, errors).
+- `search_indexes`: every vector index built, and which one is live.
+- `api_keys`, `answers`, `feedback`: the serving side (M5): who may call the API, every answer
+  given (with citations, latency and cost), and what users thought of it.
 """
 
 from dataclasses import dataclass
@@ -12,9 +15,11 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -95,6 +100,65 @@ class SearchIndexRow(Base):
     fingerprint: Mapped[str] = mapped_column(String(64))
     n_points: Mapped[int] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ApiKeyRow(Base):
+    """API keys are stored as a SHA-256 of the secret: a leaked table does not leak keys.
+
+    A fast hash is enough because keys are random 256-bit tokens, not human passwords.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    prefix: Mapped[str] = mapped_column(String(16))  # shown in listings and logs, never the key
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    rate_limit_per_min: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AnswerRow(Base):
+    """Every answer served: the audit trail, the source of feedback and of monitoring (M6)."""
+
+    __tablename__ = "answers"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # uuid4 hex, returned to clients
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    api_key_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_keys.id", ondelete="SET NULL"), index=True
+    )
+    question: Mapped[str] = mapped_column(Text)
+    lang: Mapped[str] = mapped_column(String(2))
+    answer: Mapped[str] = mapped_column(Text)
+    refused: Mapped[bool]
+    refusal_reason: Mapped[str | None] = mapped_column(String(32))
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    model: Mapped[str] = mapped_column(String(128))
+    prompt_version: Mapped[str] = mapped_column(String(16))
+    retrieval: Mapped[str] = mapped_column(String(64))
+    input_tokens: Mapped[int] = mapped_column(Integer)
+    output_tokens: Mapped[int] = mapped_column(Integer)
+    cost_usd: Mapped[float]
+    latency_ms: Mapped[dict[str, float]] = mapped_column(JSON)
+    cache_hit: Mapped[bool] = mapped_column(default=False)
+
+
+class FeedbackRow(Base):
+    __tablename__ = "feedback"
+    __table_args__ = (CheckConstraint("rating IN (-1, 1)", name="ck_feedback_rating"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    answer_id: Mapped[str] = mapped_column(
+        ForeignKey("answers.id", ondelete="CASCADE"),
+        unique=True,  # latest opinion wins
+    )
+    rating: Mapped[int] = mapped_column(SmallInteger)  # +1 helpful, -1 not helpful
+    comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

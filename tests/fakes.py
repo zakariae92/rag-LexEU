@@ -1,8 +1,11 @@
-"""In-memory stand-ins for the pipeline's ports (fetcher, raw store, registry)."""
+"""In-memory stand-ins for the pipeline's ports (fetcher, raw store, registry) and for the
+serving side (API keys, rate limiter, answer log)."""
 
 from pathlib import Path
 
+from lexeu.infra.api_keys import ApiKey
 from lexeu.infra.db import DocumentMeta, DocumentRecord
+from lexeu.infra.rate_limit import RateDecision
 from lexeu.ingestion.corpus import ActSpec, Corpus, Lang
 from lexeu.ingestion.fetcher import FetchedDoc, FetchError
 from lexeu.ingestion.models import Chunk
@@ -56,3 +59,44 @@ class FakeRegistry:
 
     async def delete_document(self, celex: str, lang: str) -> None:
         del self.docs[(celex, lang)]
+
+
+# ----------------------------------------------------------------------------- serving side
+
+TEST_KEY = "lx_test-key"
+
+
+class FakeKeys:
+    """Accepts exactly TEST_KEY."""
+
+    async def authenticate(self, secret: str) -> ApiKey | None:
+        return ApiKey(1, "tests", "lx_test", 100) if secret == TEST_KEY else None
+
+
+class FakeLimiter:
+    """Allows `budget` requests per subject, then refuses."""
+
+    def __init__(self, budget: int = 1000) -> None:
+        self.budget = budget
+        self.seen: dict[str, int] = {}
+
+    async def hit(self, subject: str, limit: int) -> RateDecision:
+        self.seen[subject] = self.seen.get(subject, 0) + 1
+        cap = min(self.budget, limit)
+        allowed = self.seen[subject] <= cap
+        return RateDecision(allowed, limit, max(0, cap - self.seen[subject]), 0 if allowed else 42)
+
+
+class MemoryAnswerLog:
+    def __init__(self) -> None:
+        self.answers: dict[str, object] = {}
+        self.feedbacks: dict[str, tuple[int, str | None]] = {}
+
+    async def record(self, answer_id: str, answer: object, **_: object) -> None:
+        self.answers[answer_id] = answer
+
+    async def feedback(self, answer_id: str, rating: int, comment: str | None) -> bool:
+        if answer_id not in self.answers:
+            return False
+        self.feedbacks[answer_id] = (rating, comment)
+        return True
