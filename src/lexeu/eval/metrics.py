@@ -50,3 +50,11 @@ def ndcg_at_k(retrieved: list[str], expected: list[str], k: int) -> float:
                 break
     ideal = sum(1.0 / math.log2(rank + 2) for rank in range(min(len(expected), k)))
     return dcg / ideal
+
+
+def quantile(values: list[float], q: float) -> float:
+    """Nearest-rank quantile (no interpolation): p95 is a latency someone actually waited."""
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]

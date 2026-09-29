@@ -1,4 +1,4 @@
-"""`lexeu eval validate | retrieval | review`."""
+"""`lexeu eval validate | retrieval | ablation | answers | review`."""
 
 import asyncio
 import json
@@ -13,9 +13,13 @@ from rich.markdown import Markdown
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from lexeu.commands.ask import answerer_session
 from lexeu.commands.index import make_embedder
 from lexeu.core.config import Settings, get_settings
 from lexeu.core.logging import configure_logging
+from lexeu.eval.answers import AnswerItem, AnswerReport, evaluate_answers
+from lexeu.eval.answers import check_gate as check_answers_gate
+from lexeu.eval.answers import to_markdown as answers_markdown
 from lexeu.eval.golden import (
     GoldenSet,
     Review,
@@ -24,6 +28,7 @@ from lexeu.eval.golden import (
     save_reviews,
     status_of,
 )
+from lexeu.eval.judge import JUDGE_VERSION, Judge
 from lexeu.eval.metrics import matches
 from lexeu.eval.retrieval import (
     RetrievalReport,
@@ -32,6 +37,8 @@ from lexeu.eval.retrieval import (
     evaluate_retrieval,
     to_markdown,
 )
+from lexeu.generation.factory import make_llm
+from lexeu.generation.prompt import PROMPT_VERSION
 from lexeu.infra.db import ChunkRow, IndexRecord, SqlIndexRegistry
 from lexeu.retrieval.config import RetrievalConfig, load_experiments
 from lexeu.retrieval.index import ensure_same_model
@@ -164,11 +171,12 @@ async def _retrieval(
     configure_logging(settings)
     gs = load_golden(golden or Path(settings.eval.golden_path))
     configs = _experiments(settings)
-    name = experiment or settings.eval.default_experiment
-    if name not in configs:
-        raise typer.BadParameter(f"unknown experiment {name!r}; known: {sorted(configs)}")
+    if experiment and experiment not in configs:
+        raise typer.BadParameter(f"unknown experiment {experiment!r}; known: {sorted(configs)}")
+    # Default: the configuration the API serves, so the gate checks what is deployed.
+    chosen = configs[experiment] if experiment else settings.retrieval
 
-    index, [(cfg, report)] = await _run_configs(settings, gs, [configs[name]], k)
+    index, [(cfg, report)] = await _run_configs(settings, gs, [chosen], k)
 
     markdown = to_markdown(report, title=f"Retrieval: {cfg.name} ({index.model_id}), k={k}")
     out_dir = Path(settings.eval.reports_dir)
@@ -242,6 +250,147 @@ def _log_mlflow(
         mlflow.log_artifact(str(out_dir / "retrieval_latest.json"))
         mlflow.log_artifact(str(out_dir / "retrieval_latest.md"))
     console.print(f"[dim]Logged to MLflow ({cfg.mlflow_tracking_uri}), run '{run_name}'.[/]")
+
+
+@app.command()
+def answers(
+    golden: GoldenOpt = None,
+    category: Annotated[
+        list[str] | None, typer.Option("--category", "-c", help="Only these categories.")
+    ] = None,
+    item_id: Annotated[list[str] | None, typer.Option("--id", help="Only these items.")] = None,
+    limit: Annotated[int | None, typer.Option(help="First N items (smoke runs).")] = None,
+    model: Annotated[str | None, typer.Option(help="Generator override (LiteLLM id).")] = None,
+    judge: Annotated[bool, typer.Option(help="Grade answers with the judge model.")] = True,
+    cache: Annotated[bool, typer.Option(help="Reuse identical LLM calls (free reruns).")] = True,
+    gate: Annotated[bool, typer.Option(help="Fail if below the `answers:` thresholds.")] = False,
+    mlflow: Annotated[bool, typer.Option(help="Log the run to MLflow.")] = False,
+    run_name: Annotated[str | None, typer.Option(help="MLflow run name.")] = None,
+) -> None:
+    """End to end: answers, refusals, citations, judge verdicts, latency and cost."""
+    raise typer.Exit(
+        asyncio.run(
+            _answers(golden, category, item_id, limit, model, judge, cache, gate, mlflow, run_name)
+        )
+    )
+
+
+async def _answers(
+    golden: Path | None,
+    categories: list[str] | None,
+    ids: list[str] | None,
+    limit: int | None,
+    model: str | None,
+    use_judge: bool,
+    cache: bool,
+    gate: bool,
+    use_mlflow: bool,
+    run_name: str | None,
+) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    gs = load_golden(golden or Path(settings.eval.golden_path))
+    items = [
+        i for i in gs.items
+        if (not categories or i.category in categories) and (not ids or i.id in ids)
+    ][:limit]  # fmt: skip
+
+    done = 0
+
+    def progress(r: AnswerItem) -> None:
+        nonlocal done
+        done += 1
+        mark = "refused" if r.refused else (r.correctness or "answered")
+        console.print(f"[dim]{done}/{len(items)} {r.id}: {mark}[/]")
+
+    judge_llm, judge_cache = (
+        make_llm(
+            settings,
+            model=settings.generation.judge_model,
+            cache=cache,
+            reasoning_effort=settings.generation.judge_reasoning_effort,
+        )
+        if use_judge
+        else (None, None)
+    )
+    try:
+        async with answerer_session(settings, model=model, cache=cache) as (answerer, _):
+            report = await evaluate_answers(
+                items,
+                answerer,
+                Judge(judge_llm) if judge_llm else None,
+                concurrency=settings.generation.concurrency,
+                on_item=progress,
+            )
+    finally:
+        if judge_cache:
+            judge_cache.close()
+
+    markdown = answers_markdown(report, title=f"Answers: {report.model}")
+    out_dir = Path(settings.eval.reports_dir)
+    _write_answer_reports(out_dir, report, markdown)
+    console.print(Markdown(markdown))
+
+    if use_mlflow:
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        params = {
+            "model": report.model,
+            "judge_model": report.judge_model,
+            "judge_reasoning_effort": settings.generation.judge_reasoning_effort,
+            "prompt_version": PROMPT_VERSION,
+            "judge_version": JUDGE_VERSION,
+            "retrieval": settings.retrieval.name,
+            **settings.generation.model_dump(
+                include={
+                    "k",
+                    "expand_chars",
+                    "temperature",
+                    "reasoning_effort",
+                    "max_output_tokens",
+                }
+            ),
+            "golden_version": gs.version,
+            "golden_items": len(items),
+        }
+        _log_answers_mlflow(settings, params, report, out_dir, run_name or f"answers-{stamp}")
+
+    if gate:
+        failures = check_answers_gate(report, Path(settings.eval.thresholds_path))
+        if failures:
+            console.print("[red bold]Answer quality gate FAILED[/]")
+            for f in failures:
+                console.print(f"[red]  - {f}[/]")
+            return 1
+        console.print("[green bold]Answer quality gate passed[/]")
+    return 0
+
+
+def _write_answer_reports(out_dir: Path, report: AnswerReport, markdown: str) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "answers_latest.json").write_text(
+        json.dumps(report.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    (out_dir / "answers_latest.md").write_text(markdown, encoding="utf-8")
+
+
+def _log_answers_mlflow(
+    settings: Settings, params: dict[str, Any], report: AnswerReport, out_dir: Path, run_name: str
+) -> None:
+    import mlflow
+
+    mlflow.set_tracking_uri(settings.eval.mlflow_tracking_uri)
+    mlflow.set_experiment(settings.eval.mlflow_experiment_answers)
+    with mlflow.start_run(run_name=run_name):
+        mlflow.log_params(params)
+        mlflow.log_metrics(report.overall)
+        for slice_kind, slices in (("cat", report.by_category), ("lang", report.by_lang)):
+            for name, metrics in slices.items():
+                mlflow.log_metrics({f"{slice_kind}.{name}.{m}": v for m, v in metrics.items()})
+        mlflow.log_metrics({f"latency_ms.{k}": v for k, v in report.latency_ms.items()})
+        mlflow.log_metrics({f"cost.{k}": v for k, v in report.cost.items()})
+        mlflow.log_artifact(str(out_dir / "answers_latest.json"))
+        mlflow.log_artifact(str(out_dir / "answers_latest.md"))
+    console.print(f"[dim]Logged to MLflow, run '{run_name}'.[/]")
 
 
 @app.command()

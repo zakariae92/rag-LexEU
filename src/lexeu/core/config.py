@@ -9,6 +9,8 @@ from typing import Literal
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from lexeu.retrieval.config import RetrievalConfig
+
 
 class PostgresSettings(BaseModel):
     host: str = "127.0.0.1"
@@ -61,14 +63,42 @@ class EmbeddingSettings(BaseModel):
     cache_path: str = "data/embeddings/bge-m3.sqlite"
 
 
+# The configuration the API serves and the CI gate evaluates, chosen by the M3 ablation (ADR 0006).
+PRODUCTION_RETRIEVAL = RetrievalConfig(
+    name="dense-recitals-demote",
+    description="BGE-M3 dense, recital scores x0.9 so articles win close calls",
+    recitals="demote",
+    recital_penalty=0.9,
+)
+
+
+class GenerationSettings(BaseModel):
+    """LLM calls go through LiteLLM: switching provider is one string (`gemini/`, `ollama/`)."""
+
+    model: str = "gemini/gemini-3.1-flash-lite"  # M4: cheapest tested model, p95 < 2 s
+    # A stronger model than the generator grades the answers. Flash, not Pro: the Pro free tier
+    # allows about one judged run per day (ADR 0007).
+    judge_model: str = "gemini/gemini-3.8-flash"
+    judge_reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = "low"
+    temperature: float | None = None  # None = provider default (Gemini 3 advises against < 1)
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = "minimal"
+    max_output_tokens: int = 1024
+    k: int = 8  # provisions given to the model as numbered sources
+    expand_chars: int = 6000  # each source = its whole provision, up to this size (0 = off)
+    timeout_s: float = 30.0
+    max_retries: int = 3
+    concurrency: int = 4  # parallel questions during evaluation (provider rate limits)
+    cache_path: str = "data/llm/responses.sqlite"  # evaluation only: identical calls are free
+
+
 class EvalSettings(BaseModel):
     golden_path: str = "eval/golden/golden_v1.yaml"
     experiments_path: str = "eval/experiments.yaml"
-    default_experiment: str = "dense-recitals-demote"  # used by the CI gate and the API (M3)
     thresholds_path: str = "eval/thresholds.yaml"
     reports_dir: str = "eval/reports"
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
     mlflow_experiment: str = "rag-lexeu-retrieval"
+    mlflow_experiment_answers: str = "rag-lexeu-answers"
 
 
 class Settings(BaseSettings):
@@ -83,6 +113,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
     probe_timeout_s: float = 2.0
+    gemini_api_key: SecretStr | None = None  # GEMINI_API_KEY
 
     postgres: PostgresSettings = PostgresSettings()
     qdrant: QdrantSettings = QdrantSettings()
@@ -90,6 +121,8 @@ class Settings(BaseSettings):
     object_store: ObjectStoreSettings = ObjectStoreSettings()
     ingestion: IngestionSettings = IngestionSettings()
     embeddings: EmbeddingSettings = EmbeddingSettings()
+    retrieval: RetrievalConfig = PRODUCTION_RETRIEVAL
+    generation: GenerationSettings = GenerationSettings()
     eval: EvalSettings = EvalSettings()
 
 

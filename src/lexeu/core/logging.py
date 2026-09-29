@@ -49,3 +49,5 @@ def configure_logging(settings: Settings) -> None:
     logging.getLogger("uvicorn.access").disabled = True
     # Outgoing HTTP calls (probes, later LLM/embedding APIs) are traced, not logged.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    # LiteLLM logs every call at INFO; usage and cost are reported by our own answer log.
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)

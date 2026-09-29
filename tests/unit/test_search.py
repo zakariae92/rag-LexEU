@@ -96,3 +96,55 @@ async def test_rerank_reorders_and_keeps_the_recital_policy() -> None:
 def test_rerank_config_requires_a_reranker() -> None:
     with pytest.raises(ValueError, match="needs a reranker"):
         _retriever(RetrievalConfig(rerank="some/model"))
+
+
+# ----------------------------------------------------------------------------- small-to-big
+
+
+def _part(part: int, text: str, citation: str, lang: str = "en") -> SimpleNamespace:
+    key = "32022R2554:art_30:p2"
+    return SimpleNamespace(
+        payload={
+            "chunk_id": f"32022R2554:{lang}:art_30:p2:{part}", "provision_key": key,
+            "lang": lang, "part": part, "citation": citation, "text": text,
+        }
+    )  # fmt: skip
+
+
+LEAD = "2. The contractual arrangements shall include at least the following elements:"
+PARTS = [
+    _part(1, f"{LEAD}\n(a) services;\n(b) locations;", "Art. 30(2) DORA, points (a)-(b)"),
+    _part(2, f"{LEAD}\n(c) data protection;\n(d) data return;", "Art. 30(2) DORA, points (c)-(d)"),
+    _part(1, "2. Les accords contractuels ...", "Art. 30, par. 2, DORA", lang="fr"),
+]  # fmt: skip
+
+
+class ScrollQdrant(FakeQdrant):
+    async def scroll(self, collection: str, **kwargs: Any) -> tuple[list[Any], None]:
+        self.calls.append(kwargs)
+        return PARTS, None
+
+
+def _found_part() -> Any:
+    from lexeu.retrieval.search import Hit
+
+    return Hit("32022R2554:en:art_30:p2:1", "32022R2554:art_30:p2", "en",
+               "Art. 30(2) DORA, points (a)-(b)", 0.8, str(PARTS[0].payload["text"]))  # fmt: skip
+
+
+async def test_expand_gives_the_whole_provision_without_repeating_the_lead_in() -> None:
+    qdrant = ScrollQdrant([])
+    retriever = Retriever(qdrant, FakeEmbedder(), RetrievalConfig())  # type: ignore[arg-type]
+    [hit] = await retriever.expand([_found_part()])
+
+    assert "(a) services" in hit.text and "(d) data return" in hit.text
+    assert hit.text.count(LEAD) == 1
+    assert hit.citation == "Art. 30(2) DORA"  # the label now covers the whole paragraph
+    assert "Les accords" not in hit.text  # same language only
+    assert len(qdrant.calls) == 1  # one query for all hits
+
+
+async def test_expand_respects_the_size_cap() -> None:
+    retriever = Retriever(ScrollQdrant([]), FakeEmbedder(), RetrievalConfig())  # type: ignore[arg-type]
+    [hit] = await retriever.expand([_found_part()], max_chars=150)
+    assert hit.text == PARTS[0].payload["text"]  # the second part would not fit

@@ -16,7 +16,7 @@ from typing import Any, Protocol
 import yaml
 
 from lexeu.eval.golden import GoldenItem
-from lexeu.eval.metrics import hit_at_k, mrr_at_k, ndcg_at_k, recall_at_k
+from lexeu.eval.metrics import hit_at_k, mrr_at_k, ndcg_at_k, quantile, recall_at_k
 from lexeu.retrieval.search import Hit
 
 KS = (1, 3, 5, 10)
@@ -129,21 +129,16 @@ def _score_separation(results: list[ItemResult]) -> dict[str, float]:
     out: dict[str, float] = {}
     if answerable:
         out["top_score_answerable_median"] = round(statistics.median(answerable), 4)
-        out["top_score_answerable_p10"] = round(_quantile(answerable, 0.10), 4)
+        out["top_score_answerable_p10"] = round(quantile(answerable, 0.10), 4)
     if unanswerable:
         out["top_score_unanswerable_median"] = round(statistics.median(unanswerable), 4)
-        out["top_score_unanswerable_p90"] = round(_quantile(unanswerable, 0.90), 4)
+        out["top_score_unanswerable_p90"] = round(quantile(unanswerable, 0.90), 4)
     return out
 
 
 def _latency(results: list[ItemResult]) -> dict[str, float]:
     values = [r.latency_ms for r in results]
-    return {"p50": round(_quantile(values, 0.5), 1), "p95": round(_quantile(values, 0.95), 1)}
-
-
-def _quantile(values: list[float], q: float) -> float:
-    ordered = sorted(values)
-    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+    return {"p50": round(quantile(values, 0.5), 1), "p95": round(quantile(values, 0.95), 1)}
 
 
 # ------------------------------------------------------------------------------ reporting
