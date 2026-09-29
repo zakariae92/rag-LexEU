@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from lexeu.api.admission import Admission, Overloaded
 from lexeu.api.deps import Caller, caller
 from lexeu.generation.answer import Answer, Answerer, Delta, Sources
 from lexeu.infra.answer_cache import CachingAnswerer
@@ -87,6 +88,8 @@ async def ask(
     who: Annotated[Caller, Depends(caller)],
 ) -> AskResponse:
     answerer = _answerer(request)
+    admission: Admission = request.app.state.admission
+    await _admit(admission)
     try:
         answer = await answerer.answer(body.question, lang=body.lang)
     except Exception as exc:  # provider timeout, quota, outage: retryable, not a server bug
@@ -97,6 +100,8 @@ async def ask(
             "answer generation is temporarily unavailable, please retry",
             headers={"Retry-After": "30"},
         ) from exc
+    finally:
+        admission.release()
     answer_id = uuid.uuid4().hex
     # Logged after the response is sent: the client never waits for the database.
     background.add_task(_record, request.app.state.answer_log, answer_id, answer, request, who.key)
@@ -117,9 +122,18 @@ async def ask_stream(
     carries a refusal and the client replaces the streamed draft. `error` if the provider fails.
     """
     answerer = _answerer(request)
+    admission: Admission = request.app.state.admission
+    await _admit(admission)  # before the 200 is sent, so an overload is still a clean 503
     answer_id = uuid.uuid4().hex
 
     async def events() -> AsyncIterator[str]:
+        try:
+            async for chunk in _events():
+                yield chunk
+        finally:
+            admission.release()  # also when the client disconnects mid-stream
+
+    async def _events() -> AsyncIterator[str]:
         final: Answer | None = None
         try:
             async for event in answerer.stream(body.question, lang=body.lang):
@@ -152,6 +166,18 @@ async def ask_stream(
             **request.state.rate_limit_headers,
         },
     )
+
+
+async def _admit(admission: Admission) -> None:
+    try:
+        await admission.acquire()
+    except Overloaded as exc:
+        log.warning("overloaded")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "the service is at capacity, please retry",
+            headers={"Retry-After": "2"},
+        ) from exc
 
 
 def _answerer(request: Request) -> Answerer | CachingAnswerer:

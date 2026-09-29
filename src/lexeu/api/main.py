@@ -11,6 +11,7 @@ import structlog
 from fastapi import FastAPI
 
 from lexeu import __version__
+from lexeu.api.admission import Admission
 from lexeu.api.middleware import RequestContextMiddleware
 from lexeu.api.routes import ask, health
 from lexeu.core.config import Settings, get_settings
@@ -48,6 +49,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.api_keys = ApiKeyStore(resources.db)
         app.state.answer_log = AnswerLog(resources.db)
         app.state.rate_limiter = RateLimiter(resources.redis)
+        app.state.admission = Admission(
+            settings.serving.max_inflight_answers, settings.serving.queue_timeout_s
+        )
         log.info("startup", env=settings.env, version=__version__)
         try:
             yield
