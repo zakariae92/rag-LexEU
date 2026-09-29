@@ -41,7 +41,7 @@ Key decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr/).
 - [x] **M1 · Ingestion**: official Cellar API (EN+FR), structure-aware chunking with citations, Postgres registry with lineage, incremental sync, Alembic migrations
 - [x] **M2 · Evaluation first**: 165-question golden set (EN/FR), retrieval metrics, MLflow, BGE-M3 embeddings (GPU batch + CPU online, parity-checked), blue/green Qdrant index, CI quality gate
 - [x] **M3 · Retrieval**: 14-config ablation (dense, BM25 hybrid, recital policy, cross-encoder rerankers), production config chosen by the numbers, CI gate raised
-- [ ] **M4 · Generation**: LiteLLM gateway, citations, refusal, grounding check
+- [x] **M4 · Generation**: LiteLLM gateway, cited answers, explicit refusals, grounding checks, LLM judge, CI answer gate (p95 1.6 s, $0.79 per 1,000 questions)
 - [ ] **M5 · Backend**: streaming chat API, auth, rate limiting, semantic cache, feedback
 - [ ] **M6 · Observability**: Langfuse, OpenTelemetry, Grafana dashboards, alerts, load tests
 - [ ] **M7 · UI & delivery**: Next.js chat, CI eval gate, Terraform deployment
@@ -155,6 +155,37 @@ scores them all on the golden set (`uv run lexeu eval ablation --mlflow`, [full 
 - **Rerankers help, but not enough to pay for them yet.** +2 points hit@5 for 0.6-2.5 s on a GPU
   (or 5 s on CPU). Their real asset is a score that separates unanswerable questions; M4 decides
   whether refusals need it. Design: [ADR 0006](docs/adr/0006-retrieval-pipeline.md).
+
+## Generation (M4)
+
+`POST /v1/ask` (or `uv run lexeu ask "..."`) returns an answer where every sentence cites its
+source, or an explicit refusal. The model reads the retrieved provisions as numbered sources and
+returns JSON; a deterministic check then removes citations to sources it was not given, and turns
+an answer without any valid citation into a refusal.
+
+| Refused unanswerable | False refusals | Citation hit | Invalid citations | Correct (judge) | Faithful (judge) | p95 end to end | Cost |
+|---|---|---|---|---|---|---|---|
+| 100 % | 2.7 % | 95.9 % | 0 % | 89.7 % | 99.3 % | **1.64 s** | **$0.79 / 1,000 questions** |
+
+Full golden set (165 questions), `gemini-3.1-flash-lite` judged by `gemini-3.8-flash`
+([report](eval/baselines/m4_answers.md)).
+
+- **The smallest model won.** Gemini 3.8 Flash was not more accurate here and took 3.6-6.1 s at
+  p95: the answer is in the sources, so extra reasoning only adds latency.
+- **Small-to-big context.** Search runs on small chunks, but the model receives each provision
+  whole. Before, a list split across two chunks (Art. 30(2) DORA) reached the model half-cut and
+  it refused. Measured: correct answers 84.9 % -> 89.7 %, for +150 ms.
+- **Failures are designed in.** A provider timeout or quota error returns a retryable 503, and
+  counts as an error in the evaluation instead of aborting it.
+
+```bash
+uv run lexeu ask "Quel est le délai pour notifier une violation de données ?"
+uv run lexeu eval answers --mlflow   # answers, refusals, citations, judge, latency, cost
+```
+
+The CI eval job also runs this **answer gate** (thresholds in [`eval/thresholds.yaml`](eval/thresholds.yaml));
+an LLM response cache keeps reruns free when prompts and sources are unchanged.
+Design: [ADR 0007](docs/adr/0007-generation.md).
 
 ## Project layout
 
