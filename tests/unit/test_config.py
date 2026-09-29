@@ -48,3 +48,9 @@ def test_explicit_tracing_langfuse_keys_win(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("TRACING__LANGFUSE_PUBLIC_KEY", "pk-lf-explicit")
 
     assert Settings(_env_file=None).tracing.langfuse_public_key == "pk-lf-explicit"
+
+
+def test_managed_postgres_uses_tls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POSTGRES__SSL", "true")
+    assert Settings(_env_file=None).postgres.dsn.endswith("?ssl=require")
+    assert "ssl" not in Settings(_env_file=None, postgres={"ssl": False}).postgres.dsn

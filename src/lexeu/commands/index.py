@@ -7,13 +7,12 @@ from typing import Annotated
 
 import numpy as np
 import typer
-from qdrant_client import AsyncQdrantClient
 from rich.console import Console
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from lexeu.core.config import EmbeddingSettings, Settings, get_settings
 from lexeu.core.logging import configure_logging
 from lexeu.infra.db import SqlIndexRegistry
+from lexeu.infra.resources import make_engine, make_qdrant
 from lexeu.retrieval.embeddings import (
     CachedEmbedder,
     EmbeddingCache,
@@ -53,7 +52,7 @@ async def _embed(batch: int, parity_sample: int, skip_parity: bool) -> None:
     settings = get_settings()
     configure_logging(settings)
     cfg = settings.embeddings
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     try:
         chunks = await SqlIndexRegistry(engine).all_chunks()
     finally:
@@ -135,8 +134,8 @@ def build() -> None:
 async def _build() -> None:
     settings = get_settings()
     configure_logging(settings)
-    engine = create_async_engine(settings.postgres.dsn)
-    qdrant = AsyncQdrantClient(url=settings.qdrant.url)
+    engine = make_engine(settings)
+    qdrant = make_qdrant(settings)
     embedder, tei, cache = make_embedder(settings)
     try:
         report = await build_index(SqlIndexRegistry(engine), qdrant, embedder)
@@ -160,7 +159,7 @@ def status() -> None:
 
 async def _status() -> None:
     settings = get_settings()
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     try:
         active = await SqlIndexRegistry(engine).active("chunks")
     finally:

@@ -8,6 +8,14 @@ import structlog
 from lexeu.core.config import Settings
 
 
+def add_severity(
+    _logger: object, _method: str, event: structlog.types.EventDict
+) -> structlog.types.EventDict:
+    """Cloud Logging reads the level from `severity` (it would show every JSON line as DEFAULT)."""
+    event["severity"] = str(event.get("level", "info")).upper()
+    return event
+
+
 def configure_logging(settings: Settings) -> None:
     shared: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,  # carries request_id etc.
@@ -16,6 +24,8 @@ def configure_logging(settings: Settings) -> None:
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
     ]
+    if settings.log_json:
+        shared.append(add_severity)
     renderer: structlog.types.Processor = (
         structlog.processors.JSONRenderer()
         if settings.log_json

@@ -18,11 +18,13 @@ class PostgresSettings(BaseModel):
     user: str = "lexeu"
     password: SecretStr = SecretStr("lexeu")
     db: str = "lexeu"
+    ssl: bool = False  # managed Postgres (Neon, Cloud SQL public IP) requires TLS
 
     @property
     def dsn(self) -> str:
         pwd = self.password.get_secret_value()
-        return f"postgresql+asyncpg://{self.user}:{pwd}@{self.host}:{self.port}/{self.db}"
+        dsn = f"postgresql+asyncpg://{self.user}:{pwd}@{self.host}:{self.port}/{self.db}"
+        return f"{dsn}?ssl=require" if self.ssl else dsn
 
 
 class QdrantSettings(BaseModel):

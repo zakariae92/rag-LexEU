@@ -7,10 +7,10 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from lexeu.core.config import get_settings
 from lexeu.infra.api_keys import ApiKeyStore
+from lexeu.infra.resources import make_engine
 
 app = typer.Typer(help="Manage API keys.", no_args_is_help=True)
 console = Console()
@@ -18,7 +18,7 @@ console = Console()
 
 def _run[T](fn: Callable[[ApiKeyStore], Awaitable[T]]) -> T:
     async def main() -> T:
-        engine = create_async_engine(get_settings().postgres.dsn)
+        engine = make_engine(get_settings())
         try:
             return await fn(ApiKeyStore(engine))
         finally:

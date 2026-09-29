@@ -7,11 +7,9 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from qdrant_client import AsyncQdrantClient
 from rich.console import Console
 from rich.markdown import Markdown
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from lexeu.commands.ask import answerer_session
 from lexeu.commands.index import make_embedder
@@ -42,6 +40,7 @@ from lexeu.eval.retrieval import (
 from lexeu.generation.factory import make_llm
 from lexeu.generation.prompt import PROMPT_VERSION
 from lexeu.infra.db import ChunkRow, IndexRecord, SqlIndexRegistry
+from lexeu.infra.resources import make_engine, make_qdrant
 from lexeu.retrieval.config import RetrievalConfig, load_experiments
 from lexeu.retrieval.index import ensure_same_model
 from lexeu.retrieval.rerank import make_reranker, remote_rerankers
@@ -63,7 +62,7 @@ async def _validate(golden: Path | None) -> None:
     settings = get_settings()
     path = golden or Path(settings.eval.golden_path)
     gs = load_golden(path)
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     try:
         async with engine.connect() as conn:
             keys = set((await conn.execute(select(ChunkRow.provision_key).distinct())).scalars())
@@ -129,8 +128,8 @@ def _experiments(settings: Settings) -> dict[str, RetrievalConfig]:
 async def _run_configs(
     settings: Settings, gs: GoldenSet, configs: list[RetrievalConfig], k: int
 ) -> tuple[IndexRecord, list[tuple[RetrievalConfig, RetrievalReport]]]:
-    engine = create_async_engine(settings.postgres.dsn)
-    qdrant = AsyncQdrantClient(url=settings.qdrant.url)
+    engine = make_engine(settings)
+    qdrant = make_qdrant(settings)
     embedder, tei, cache = make_embedder(settings)
     results: list[tuple[RetrievalConfig, RetrievalReport]] = []
     try:
@@ -452,7 +451,7 @@ async def _review(golden: Path | None, reviewer: str, all_items: bool) -> None:
     todo = [i for i in gs.items if all_items or status_of(i, reviews) == "draft"]
     console.print(f"{len(todo)} item(s) to review. Answers: [v]erify, [r]eject, [s]kip, [q]uit.\n")
 
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     try:
         for n, item in enumerate(todo, start=1):
             console.rule(f"[bold]{item.id}[/] ({n}/{len(todo)}) {item.category}, {item.lang}")

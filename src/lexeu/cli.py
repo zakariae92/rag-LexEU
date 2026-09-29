@@ -6,7 +6,6 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from lexeu.commands import ask as ask_cmd
 from lexeu.commands import evaluate as evaluate_cmd
@@ -15,6 +14,7 @@ from lexeu.commands import keys as keys_cmd
 from lexeu.core.config import get_settings
 from lexeu.core.logging import configure_logging
 from lexeu.infra.db import SqlRegistry
+from lexeu.infra.resources import make_engine
 from lexeu.infra.storage import S3RawStore
 from lexeu.ingestion.corpus import load_corpus
 from lexeu.ingestion.fetcher import CellarFetcher
@@ -55,7 +55,7 @@ def ingest(
 async def _ingest(only: set[str] | None, force: bool) -> int:
     settings = get_settings()
     configure_logging(settings)
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     registry = SqlRegistry(engine)
     store = S3RawStore(settings.object_store)
     fetcher = CellarFetcher(settings.ingestion)
@@ -100,7 +100,7 @@ def status() -> None:
 
 async def _status() -> None:
     settings = get_settings()
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     try:
         docs = await SqlRegistry(engine).list_documents()
     finally:
@@ -130,7 +130,7 @@ def show(
 
 async def _show(celex: str, eli_id: str, lang: str) -> None:
     settings = get_settings()
-    engine = create_async_engine(settings.postgres.dsn)
+    engine = make_engine(settings)
     try:
         chunks = await SqlRegistry(engine).get_chunks(celex, lang, eli_id)
     finally:

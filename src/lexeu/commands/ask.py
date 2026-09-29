@@ -7,10 +7,8 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import typer
-from qdrant_client import AsyncQdrantClient
 from rich.console import Console
 from rich.markdown import Markdown
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from lexeu.commands.index import make_embedder
 from lexeu.core.config import Settings, get_settings
@@ -19,6 +17,7 @@ from lexeu.generation.answer import Answerer
 from lexeu.generation.factory import MissingApiKeyError, make_llm
 from lexeu.generation.llm import LlmClient
 from lexeu.infra.db import SqlIndexRegistry
+from lexeu.infra.resources import make_engine, make_qdrant
 from lexeu.retrieval.index import ensure_same_model
 from lexeu.retrieval.search import Retriever
 from lexeu.retrieval.sparse import detect_lang
@@ -36,8 +35,8 @@ async def answerer_session(
     except MissingApiKeyError as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(2) from exc
-    engine = create_async_engine(settings.postgres.dsn)
-    qdrant = AsyncQdrantClient(url=settings.qdrant.url)
+    engine = make_engine(settings)
+    qdrant = make_qdrant(settings)
     embedder, tei, emb_cache = make_embedder(settings)
     try:
         await ensure_same_model(SqlIndexRegistry(engine), embedder.model_id)
