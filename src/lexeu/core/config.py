@@ -148,7 +148,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
     probe_timeout_s: float = 2.0
+    # Provider keys, picked by the model's prefix ("gemini/...", "mistral/...": see factory.py).
     gemini_api_key: SecretStr | None = None  # GEMINI_API_KEY
+    mistral_api_key: SecretStr | None = None  # MISTRAL_API_KEY
     # Langfuse's own variable names, as its project settings page shows them. They fill
     # `tracing.langfuse_*` when the TRACING__LANGFUSE_* names are not set.
     langfuse_public_key: str | None = None  # LANGFUSE_PUBLIC_KEY

@@ -54,3 +54,15 @@ def test_managed_postgres_uses_tls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POSTGRES__SSL", "true")
     assert Settings(_env_file=None).postgres.dsn.endswith("?ssl=require")
     assert "ssl" not in Settings(_env_file=None, postgres={"ssl": False}).postgres.dsn
+
+
+def test_each_model_gets_its_providers_key() -> None:
+    from pydantic import SecretStr
+
+    from lexeu.generation.factory import MissingApiKeyError, api_key_for
+
+    s = Settings(_env_file=None, gemini_api_key=SecretStr("g-key"), mistral_api_key=SecretStr(""))
+    assert api_key_for(s, "gemini/gemini-3.8-flash") == "g-key"
+    assert api_key_for(s, "ollama/llama3") is None  # local: no key
+    with pytest.raises(MissingApiKeyError, match="MISTRAL_API_KEY"):
+        api_key_for(s, "mistral/mistral-small-latest")

@@ -171,8 +171,13 @@ def test_cache_key_changes_with_generation_parameters() -> None:
 
 @pytest.mark.parametrize("effort", [None, "low"])
 def test_reasoning_effort_is_only_sent_when_set(effort: str | None) -> None:
-    client = LiteLlmClient("gemini/x", reasoning_effort=effort)
+    client = LiteLlmClient("gemini/gemini-3.1-flash-lite", reasoning_effort=effort)
     assert ("reasoning_effort" in client.params) == (effort is not None)
+
+
+def test_reasoning_effort_is_not_sent_to_models_without_it() -> None:
+    client = LiteLlmClient("ollama/llama3", reasoning_effort="minimal")
+    assert "reasoning_effort" not in client.params
 
 
 async def test_load_test_mock_is_explicit_and_answers_with_citations() -> None:

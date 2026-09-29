@@ -14,6 +14,22 @@ class MissingApiKeyError(RuntimeError):
     pass
 
 
+# The generator and the judge can come from different providers, in one process: each call gets
+# the key of its own model's provider.
+PROVIDER_KEYS = {"gemini/": "gemini_api_key", "mistral/": "mistral_api_key"}
+
+
+def api_key_for(settings: Settings, model: str) -> str | None:
+    """The API key for this model's provider; None for providers configured another way."""
+    for prefix, field in PROVIDER_KEYS.items():
+        if model.startswith(prefix):
+            secret = getattr(settings, field)
+            if secret is None or not secret.get_secret_value():  # unset, or `KEY=` in a .env
+                raise MissingApiKeyError(f"{field.upper()} is not set (see .env.example)")
+            return str(secret.get_secret_value())
+    return None  # e.g. ollama/: local, or read by LiteLLM from its own environment variables
+
+
 def make_llm(
     settings: Settings,
     model: str | None = None,
@@ -25,12 +41,9 @@ def make_llm(
         log.warning("llm_mocked_for_load_test", latency_ms=cfg.mock_latency_ms)
         return MockLlm(cfg.mock_latency_ms), None
     model = model or cfg.model
-    key = settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None
-    if model.startswith("gemini/") and not key:
-        raise MissingApiKeyError("GEMINI_API_KEY is not set (see .env.example)")
     client = LiteLlmClient(
         model,
-        api_key=key,
+        api_key=api_key_for(settings, model),
         temperature=cfg.temperature,
         max_tokens=cfg.max_output_tokens,
         reasoning_effort=reasoning_effort or cfg.reasoning_effort,

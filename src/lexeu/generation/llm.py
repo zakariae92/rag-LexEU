@@ -51,6 +51,13 @@ class LlmClient(Completer, Protocol):
         ...
 
 
+def _supports_reasoning(litellm: Any, model: str) -> bool:
+    try:
+        return bool(litellm.supports_reasoning(model=model))
+    except Exception:  # a model missing from LiteLLM's capability map
+        return False
+
+
 class LiteLlmClient:
     def __init__(
         self,
@@ -68,16 +75,17 @@ class LiteLlmClient:
             "timeout": timeout_s,
             "num_retries": max_retries,  # exponential backoff on 429 / 5xx
         }
-        if temperature is not None:
-            self._params["temperature"] = temperature
-        if reasoning_effort:
-            self._params["reasoning_effort"] = reasoning_effort
-        self._api_key = api_key
         # Importing LiteLLM takes seconds: do it at startup, not inside the first request, where
         # it would block the event loop (and every concurrent request) while it loads.
         import litellm
 
         self._litellm = litellm
+        if temperature is not None:
+            self._params["temperature"] = temperature
+        if reasoning_effort and _supports_reasoning(litellm, model):
+            # A reasoning budget is a per-provider option (Gemini's "minimal"): others reject it.
+            self._params["reasoning_effort"] = reasoning_effort
+        self._api_key = api_key
 
     @property
     def model_id(self) -> str:
