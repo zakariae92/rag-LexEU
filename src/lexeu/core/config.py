@@ -6,7 +6,7 @@ Nested sections map to env vars with a double underscore, e.g. `POSTGRES__HOST`.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, SecretStr
+from pydantic import AliasChoices, BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lexeu.retrieval.config import RetrievalConfig
@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     log_json: bool = False
     probe_timeout_s: float = 2.0
     gemini_api_key: SecretStr | None = None  # GEMINI_API_KEY
+    # Langfuse's own variable names, as its project settings page shows them. They fill
+    # `tracing.langfuse_*` when the TRACING__LANGFUSE_* names are not set.
+    langfuse_public_key: str | None = None  # LANGFUSE_PUBLIC_KEY
+    langfuse_secret_key: SecretStr | None = None  # LANGFUSE_SECRET_KEY
+    langfuse_host: str | None = Field(
+        default=None, validation_alias=AliasChoices("langfuse_base_url", "langfuse_host")
+    )  # LANGFUSE_BASE_URL (or LANGFUSE_HOST)
 
     postgres: PostgresSettings = PostgresSettings()
     qdrant: QdrantSettings = QdrantSettings()
@@ -161,6 +168,16 @@ class Settings(BaseSettings):
     cache: CacheSettings = CacheSettings()
     tracing: TracingSettings = TracingSettings()
     eval: EvalSettings = EvalSettings()
+
+    @model_validator(mode="after")
+    def _langfuse_standard_names(self) -> "Settings":
+        t = self.tracing
+        if t.langfuse_public_key is None and t.langfuse_secret_key is None:
+            t.langfuse_public_key = self.langfuse_public_key
+            t.langfuse_secret_key = self.langfuse_secret_key
+            if self.langfuse_host:
+                t.langfuse_host = self.langfuse_host
+        return self
 
 
 @lru_cache

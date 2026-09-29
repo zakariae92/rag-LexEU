@@ -27,3 +27,24 @@ def test_secrets_are_masked_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POSTGRES__PASSWORD", "s3cret")
     s = Settings(_env_file=None)
     assert "s3cret" not in repr(s)
+
+
+def test_langfuse_standard_variable_names_configure_tracing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-test")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://us.cloud.langfuse.com")
+
+    t = Settings(_env_file=None).tracing
+    assert t.langfuse_public_key == "pk-lf-test"
+    assert t.langfuse_secret_key is not None
+    assert t.langfuse_secret_key.get_secret_value() == "sk-lf-test"
+    assert t.langfuse_host == "https://us.cloud.langfuse.com"
+
+
+def test_explicit_tracing_langfuse_keys_win(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-standard")
+    monkeypatch.setenv("TRACING__LANGFUSE_PUBLIC_KEY", "pk-lf-explicit")
+
+    assert Settings(_env_file=None).tracing.langfuse_public_key == "pk-lf-explicit"
