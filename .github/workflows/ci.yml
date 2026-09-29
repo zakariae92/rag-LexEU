@@ -122,8 +122,8 @@ jobs:
       # Answer generation and judge. Without the secret the answer gate is skipped, not failed.
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       # Free-tier quotas are per minute as well as per day: a 190-question burst is refused after
-      # the first minute. Pace each model (generator, judge) below the lowest published limit.
-      GENERATION__REQUESTS_PER_MINUTE: "10"
+      # the first minute. Pace each model (generator, judge) at the project's per-minute limit.
+      GENERATION__REQUESTS_PER_MINUTE: "60"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
