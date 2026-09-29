@@ -3,9 +3,13 @@
     chunks (Postgres) -> embeddings (cached) -> new collection `chunks_<fingerprint>`
                       -> atomic alias switch `chunks` -> previous collection kept for rollback
 
-The fingerprint covers the embedding model and every chunk's id and text: rebuilding an
-unchanged corpus with the same model is a no-op, and any change produces a new collection
-that only goes live once fully written.
+Each point carries two named vectors: `dense` (the embedding model) and `bm25` (sparse,
+stemmed per language, IDF applied by Qdrant), so dense, lexical and hybrid retrieval all run
+on the same collection.
+
+The fingerprint covers the index schema, the embedding model and every chunk's id and text:
+rebuilding an unchanged corpus is a no-op, and any change produces a new collection that only
+goes live once fully written.
 """
 
 import hashlib
@@ -19,10 +23,13 @@ from qdrant_client import AsyncQdrantClient, models
 
 from lexeu.infra.db import ChunkRow, IndexRecord
 from lexeu.retrieval.embeddings import Embedder
+from lexeu.retrieval.sparse import BM25_AVG_LEN, BM25_MODEL, bm25_documents
 
 log = structlog.get_logger(__name__)
 
 KEYWORD_FIELDS = ("lang", "celex", "kind", "provision_key", "eli_id")
+DENSE, SPARSE = "dense", "bm25"
+SCHEMA = f"v2:{DENSE}+{SPARSE}({BM25_MODEL},avg_len={BM25_AVG_LEN})"
 _POINT_NS = uuid.UUID("5b2f6d1e-3c1a-4e57-9d0b-0b6a6f6c9e11")
 
 
@@ -47,7 +54,7 @@ class IndexReport:
 
 
 def fingerprint(model_id: str, chunks: list[ChunkRow]) -> str:
-    h = hashlib.sha256(model_id.encode())
+    h = hashlib.sha256(f"{SCHEMA}\x00{model_id}".encode())
     for c in sorted(chunks, key=lambda c: c.chunk_id):
         h.update(f"\x00{c.chunk_id}\x00{c.header}\x00{c.text}".encode())
     return h.hexdigest()[:12]
@@ -87,12 +94,15 @@ async def build_index(
         dim = int(_vector_size(await qdrant.get_collection(collection)))
         action: Literal["built", "reactivated"] = "reactivated"
     else:
-        vectors = await embedder.embed([embedding_text(c) for c in chunks])
+        texts = [embedding_text(c) for c in chunks]
+        vectors = await embedder.embed(texts)
         hits, misses = getattr(embedder, "hits", 0), getattr(embedder, "misses", 0)
+        sparse = _bm25_by_lang(chunks, texts)
         dim = int(vectors.shape[1])
         await qdrant.create_collection(
             collection,
-            vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
+            vectors_config={DENSE: models.VectorParams(size=dim, distance=models.Distance.COSINE)},
+            sparse_vectors_config={SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
         )
         for field in KEYWORD_FIELDS:
             await qdrant.create_payload_index(collection, field, models.PayloadSchemaType.KEYWORD)
@@ -101,10 +111,15 @@ async def build_index(
                 collection,
                 points=[
                     models.PointStruct(
-                        id=point_id(c.chunk_id), vector=v.tolist(), payload=_payload(c)
+                        id=point_id(c.chunk_id),
+                        vector={DENSE: v.tolist(), SPARSE: sp},
+                        payload=_payload(c),
                     )
-                    for c, v in zip(
-                        chunks[i : i + batch_size], vectors[i : i + batch_size], strict=True
+                    for c, v, sp in zip(
+                        chunks[i : i + batch_size],
+                        vectors[i : i + batch_size],
+                        sparse[i : i + batch_size],
+                        strict=True,
                     )
                 ],
                 wait=True,
@@ -135,6 +150,18 @@ async def ensure_same_model(
             f"but queries would use {model_id!r}"
         )
     return active
+
+
+def _bm25_by_lang(chunks: list[ChunkRow], texts: list[str]) -> list[models.SparseVector]:
+    """BM25 vectors in chunk order, each chunk stemmed with its own language's stemmer."""
+    out: list[models.SparseVector | None] = [None] * len(chunks)
+    for lang in ("en", "fr"):
+        idx = [i for i, c in enumerate(chunks) if c.lang == lang]
+        for i, vec in zip(idx, bm25_documents([texts[i] for i in idx], lang), strict=True):
+            out[i] = vec
+    if any(v is None for v in out):
+        raise ValueError("chunk with an unsupported language")
+    return [v for v in out if v is not None]
 
 
 def _payload(c: ChunkRow) -> dict[str, object]:
@@ -176,8 +203,9 @@ async def _prune(qdrant: AsyncQdrantClient, alias: str, keep: set[str]) -> None:
 
 def _vector_size(info: models.CollectionInfo) -> int:
     vectors = info.config.params.vectors
-    assert isinstance(vectors, models.VectorParams)  # noqa: S101 - single unnamed vector by construction
-    return vectors.size
+    if not isinstance(vectors, dict) or DENSE not in vectors:
+        raise RuntimeError(f"collection has no '{DENSE}' vector: built with an older schema?")
+    return vectors[DENSE].size
 
 
 def _since(start: float) -> float:

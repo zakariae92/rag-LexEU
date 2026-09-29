@@ -19,6 +19,17 @@ from lexeu.ingestion.fetcher import CellarFetcher
 from lexeu.ingestion.pipeline import sync
 
 app = typer.Typer(help="rag-LexEU command line.", no_args_is_help=True)
+
+
+@app.callback()
+def _setup() -> None:
+    """Every HTTPS client in the CLI (Cellar, HuggingFace, Modal) trusts the OS certificate
+    store: works behind corporate proxies and antivirus TLS inspection."""
+    import truststore
+
+    truststore.inject_into_ssl()
+
+
 corpus_app = typer.Typer(help="Inspect the ingested corpus.", no_args_is_help=True)
 app.add_typer(corpus_app, name="corpus")
 app.add_typer(index_cmd.app, name="index")

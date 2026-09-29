@@ -69,9 +69,6 @@ async def _embed(batch: int, parity_sample: int, skip_parity: bool) -> None:
         cache.close()
         return
 
-    import truststore  # modal's gRPC client must trust the OS store (proxies, antivirus TLS)
-
-    truststore.inject_into_ssl()
     import modal
 
     from lexeu.jobs.modal_embed import app as modal_app
