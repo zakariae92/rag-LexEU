@@ -1,14 +1,15 @@
 # Retrieval quality gate (`lexeu eval retrieval --gate`, CI job "Eval (retrieval gate)").
-# Set from the M2 baseline (dense BGE-M3, golden v1, see eval/baselines/) minus a ~2-3 point
-# margin for run-to-run noise. Raise them when a change improves the baseline; lowering them
-# must be a deliberate, reviewed decision.
+# Set from the M3 production config (`dense-recitals-demote`, golden v1, see eval/baselines/)
+# minus a ~2-3 point margin for run-to-run noise. Raise them when a change improves the baseline;
+# lowering them must be a deliberate, reviewed decision.
 overall:
-  hit@5: 0.85      # baseline 0.881
-  hit@10: 0.92     # baseline 0.940
-  recall@10: 0.89  # baseline 0.917
-  mrr@10: 0.66     # baseline 0.687
+  hit@1: 0.69      # baseline 0.722 (M2: 0.530)
+  hit@5: 0.89      # baseline 0.914
+  hit@10: 0.93     # baseline 0.954
+  recall@10: 0.91  # baseline 0.934
+  mrr@10: 0.78     # baseline 0.809 (M2: 0.687)
 by_category:
   obligation:
     hit@5: 0.95    # baseline 0.983
   lookup:
-    hit@5: 0.81    # baseline 0.842
+    hit@5: 0.88    # baseline 0.912
