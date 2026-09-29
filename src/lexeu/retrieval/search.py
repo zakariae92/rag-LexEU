@@ -6,10 +6,11 @@ question -> [language detection] -> candidates (dense | dense+BM25 fused in Qdra
 """
 
 from dataclasses import dataclass, replace
-from typing import Protocol
+from typing import Any, Protocol
 
 from qdrant_client import AsyncQdrantClient, models
 
+from lexeu.observability.spans import tracer
 from lexeu.retrieval.config import RetrievalConfig
 from lexeu.retrieval.embeddings import Embedder
 from lexeu.retrieval.index import DENSE, SPARSE
@@ -63,24 +64,24 @@ class Retriever:
         flt = self._filter(lang or (query_lang if cfg.lang == "query" else None))
 
         if cfg.mode == "sparse":
-            result = await self._qdrant.query_points(
+            result = await self._query_points(
                 self._alias, query=bm25_query(query, query_lang or "en"), using=SPARSE,
                 query_filter=flt, limit=cfg.candidates, with_payload=True,
             )  # fmt: skip
         elif cfg.mode == "dense":
-            vector = (await self._embedder.embed([query]))[0].tolist()
-            result = await self._qdrant.query_points(
+            vector = await self._embed(query)
+            result = await self._query_points(
                 self._alias, query=vector, using=DENSE, query_filter=flt,
                 limit=cfg.candidates, with_payload=True,
             )  # fmt: skip
         else:
-            vector = (await self._embedder.embed([query]))[0].tolist()
+            vector = await self._embed(query)
             fusion: models.Query
             if cfg.fusion == "dbsf":
                 fusion = models.FusionQuery(fusion=models.Fusion.DBSF)
             else:  # weighted RRF: dense and BM25 rankings do not have to count equally
                 fusion = models.RrfQuery(rrf=models.Rrf(weights=[cfg.dense_weight, 1.0]))
-            result = await self._qdrant.query_points(
+            result = await self._query_points(
                 self._alias,
                 prefetch=[
                     models.Prefetch(query=vector, using=DENSE, filter=flt, limit=cfg.candidates),
@@ -116,6 +117,18 @@ class Retriever:
             hits = sorted(reranked, key=lambda h: h.score, reverse=True)
         return hits[:k]
 
+    async def _embed(self, query: str) -> list[float]:
+        with tracer.start_as_current_span("embed.query") as span:
+            span.set_attribute("gen_ai.request.model", self._embedder.model_id)
+            vector: list[float] = (await self._embedder.embed([query]))[0].tolist()
+            return vector
+
+    async def _query_points(self, *args: Any, **kwargs: Any) -> models.QueryResponse:
+        with tracer.start_as_current_span("qdrant.query_points") as span:
+            span.set_attribute("db.system.name", "qdrant")
+            span.set_attribute("lexeu.retrieval.candidates", int(kwargs.get("limit", 0)))
+            return await self._qdrant.query_points(*args, **kwargs)
+
     async def expand(self, hits: list[Hit], max_chars: int = 6000) -> list[Hit]:
         """Small-to-big: search on chunks, but give the LLM the whole provision.
 
@@ -127,15 +140,18 @@ class Retriever:
         if not hits:
             return hits
         keys = sorted({h.provision_key for h in hits})
-        points, _ = await self._qdrant.scroll(
-            self._alias,
-            scroll_filter=models.Filter(
-                must=[models.FieldCondition(key="provision_key", match=models.MatchAny(any=keys))]
-            ),
-            limit=2000,
-            with_payload=True,
-            with_vectors=False,
-        )
+        with tracer.start_as_current_span("qdrant.scroll"):
+            points, _ = await self._qdrant.scroll(
+                self._alias,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(key="provision_key", match=models.MatchAny(any=keys))
+                    ]
+                ),
+                limit=2000,
+                with_payload=True,
+                with_vectors=False,
+            )
         parts: dict[tuple[str, str], list[dict[str, object]]] = {}
         for pt in points:
             payload = pt.payload or {}

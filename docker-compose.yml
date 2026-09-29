@@ -4,8 +4,9 @@
 #   docker compose --profile app up -d --wait    -> infrastructure + API container
 #
 #   docker compose --profile ml up -d --wait     -> + embedding server (BGE-M3, ~4 GB RAM)
+#   docker compose --profile obs up -d --wait    -> + Prometheus, Grafana, Jaeger (~400 MB RAM)
 #
-# Later milestones add profiles: `obs` (Langfuse, Prometheus, Grafana) and `pipeline` (Prefect, MLflow).
+# UIs: Grafana http://127.0.0.1:3000, Prometheus http://127.0.0.1:9090, Jaeger http://127.0.0.1:16686
 # All ports bind to 127.0.0.1: nothing is exposed to the local network.
 
 name: lexeu
@@ -126,6 +127,8 @@ services:
       QDRANT__URL: http://qdrant:6333
       REDIS__URL: redis://redis:6379/0
       OBJECT_STORE__ENDPOINT: http://object-store:9000
+      EMBEDDINGS__URL: http://embeddings:80
+      TRACING__OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       LOG_JSON: "true"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
@@ -135,7 +138,70 @@ services:
       redis: { condition: service_healthy }
       object-store: { condition: service_healthy }
 
+  # ------------------------------------------------------------------ observability (M6)
+  prometheus:
+    <<: *restart
+    profiles: ["obs"]
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # scrape an API started with `uv run poe dev`
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  grafana:
+    <<: *restart
+    profiles: ["obs"]
+    image: grafana/grafana:13.2.3
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # local only (bound to 127.0.0.1): view without login
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/lexeu.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    mem_limit: 256m
+    depends_on:
+      prometheus: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  jaeger:
+    <<: *restart
+    profiles: ["obs"]
+    # Jaeger v2 (OpenTelemetry Collector based), in-memory storage: traces are for debugging,
+    # long-term LLM traces go to Langfuse.
+    image: jaegertracing/jaeger:2.21.0
+    ports:
+      - "127.0.0.1:16686:16686"  # UI
+      - "127.0.0.1:4317:4317"  # OTLP gRPC
+      - "127.0.0.1:4318:4318"  # OTLP HTTP
+    mem_limit: 256m
+
 volumes:
+  prometheus_data:
+  grafana_data:
   qdrant_data:
   postgres_data:
   redis_data:

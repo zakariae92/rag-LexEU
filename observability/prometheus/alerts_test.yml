@@ -1,0 +1,100 @@
+# Unit tests for alerts.yml: `promtool test rules alerts_test.yml` (CI job "Observability config").
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # 10 answers per minute, 90 % of them between 2 and 3 s: p95 is about 2.9 s.
+  - interval: 1m
+    input_series:
+      - series: 'lexeu_answer_stage_seconds_bucket{stage="total", cache="miss", le="1.5"}'
+        values: "0+0x40"
+      - series: 'lexeu_answer_stage_seconds_bucket{stage="total", cache="miss", le="2.0"}'
+        values: "0+1x40"
+      - series: 'lexeu_answer_stage_seconds_bucket{stage="total", cache="miss", le="3.0"}'
+        values: "0+10x40"
+      - series: 'lexeu_answer_stage_seconds_bucket{stage="total", cache="miss", le="+Inf"}'
+        values: "0+10x40"
+    promql_expr_test:
+      - expr: lexeu:answer_latency_p95:10m > 2.8
+        eval_time: 15m
+        exp_samples:
+          - labels: "lexeu:answer_latency_p95:10m"
+            value: 2.9444444444444446
+    alert_rule_test:
+      - eval_time: 8m  # above the objective, but not for 10 minutes yet: pending, not firing
+        alertname: LexeuAnswerLatencyHigh
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: LexeuAnswerLatencyHigh
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "p95 answer latency is 2.944s (objective: 2 s)"
+              description: >
+                Check generation latency (provider slowdown?) against retrieval latency (TEI, Qdrant)
+                on the Grafana dashboard, then a slow trace in Jaeger or Langfuse.
+
+  # Healthy latency: everything under 1.5 s, no alert.
+  - interval: 1m
+    input_series:
+      - series: 'lexeu_answer_stage_seconds_bucket{stage="total", cache="miss", le="1.5"}'
+        values: "0+10x40"
+      - series: 'lexeu_answer_stage_seconds_bucket{stage="total", cache="miss", le="+Inf"}'
+        values: "0+10x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LexeuAnswerLatencyHigh
+        exp_alerts: []
+
+  # One of two scrape targets down is normal (container or host API); both down is an outage.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="lexeu-api", instance="api:8000"}'
+        values: "1 1 0 0 0 0 0 0"
+      - series: 'up{job="lexeu-api", instance="host.docker.internal:8000"}'
+        values: "0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: LexeuApiDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: LexeuApiDown
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: No API instance is answering Prometheus scrapes
+
+  # 1 failed generation for every 9 answers (10 %): above the 5 % threshold.
+  - interval: 1m
+    input_series:
+      - series: 'lexeu_llm_errors_total{error="Timeout"}'
+        values: "0+1x20"
+      - series: 'lexeu_answers_total{outcome="answered", reason="none", cache="miss", lang="en"}'
+        values: "0+9x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: LexeuLlmErrors
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: "10% of generations fail (timeouts, quota)"
+
+  # A spike of refusals with real traffic fires; the same ratio on two questions would not.
+  - interval: 1m
+    input_series:
+      - series: 'lexeu_answers_total{outcome="refused", reason="no_sources", cache="miss", lang="en"}'
+        values: "0+6x60"
+      - series: 'lexeu_answers_total{outcome="answered", reason="none", cache="miss", lang="en"}'
+        values: "0+4x60"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: LexeuRefusalRateHigh
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "60% of answers are refusals"
+              description: >
+                Split by `reason`: not_in_sources (retrieval or prompt), ungrounded or invalid_output
+                (model behaviour), no_sources (index empty or unreachable).

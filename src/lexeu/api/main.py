@@ -83,6 +83,10 @@ async def _answerer(
         return None
     retriever = Retriever(resources.qdrant, embedder, settings.retrieval)
     detect_lang("warm-up")  # loads the language models now, not on the first user's request
+    try:  # an idle embedding server can be paged out: the first call took 11 s in a trace
+        await embedder.embed(["warm-up"])
+    except Exception as exc:
+        log.warning("embeddings_warmup_failed", error=repr(exc))
     gen = settings.generation
     answerer = Answerer(retriever, llm, k=gen.k, expand_chars=gen.expand_chars)
     if not settings.cache.enabled:

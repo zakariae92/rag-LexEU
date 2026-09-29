@@ -6,6 +6,8 @@ name: CI/CD
 #   lint ──┐   ├─► eval (retrieval + answer quality gates)
 #   types ─┼───┤
 #   test ──┘   └─► build ─► smoke ─► publish (main only)
+#
+#   observability (Prometheus config, alert unit tests, dashboard JSON): independent
 
 on:
   push:
@@ -23,6 +25,20 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/rag-lexeu-api
 
 jobs:
+  observability:
+    name: Observability config
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prometheus config and alert rules are valid
+        run: |
+          docker run --rm -v "$PWD/observability/prometheus:/p:ro" -w /p             --entrypoint promtool prom/prometheus:v3.15.0 check config prometheus.yml
+      - name: Alert rules unit tests
+        run: |
+          docker run --rm -v "$PWD/observability/prometheus:/p:ro" -w /p             --entrypoint promtool prom/prometheus:v3.15.0 test rules alerts_test.yml
+      - name: Grafana dashboard is valid JSON
+        run: python3 -m json.tool observability/grafana/dashboards/lexeu.json > /dev/null
+
   lint:
     name: Lint
     runs-on: ubuntu-24.04

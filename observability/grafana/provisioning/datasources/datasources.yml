@@ -1,0 +1,14 @@
+apiVersion: 1
+deleteDatasources:  # provisioned by an earlier version of this file
+  - name: Jaeger
+    orgId: 1
+# Traces are browsed in the Jaeger UI (dashboard link) and in Langfuse: Jaeger v2 serves only its
+# v3 query API, which Grafana's Jaeger datasource does not read.
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData: { timeInterval: 15s }

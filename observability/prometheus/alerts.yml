@@ -1,0 +1,87 @@
+# Alerts on what users and the budget feel, not on internals. Thresholds come from the
+# measured baselines (ADR 0007/0008): p95 1.6 s against a 2 s objective, 2.7 % false refusals,
+# $0.79 per 1,000 questions. Unit-tested with `promtool test rules alerts_test.yml` in CI.
+groups:
+  - name: lexeu-slo
+    rules:
+      - record: lexeu:answer_latency_p95:10m
+        expr: >
+          histogram_quantile(0.95, sum by (le) (
+            rate(lexeu_answer_stage_seconds_bucket{stage="total", cache="miss"}[10m])))
+
+      - record: lexeu:refusal_ratio:30m
+        expr: >
+          sum(rate(lexeu_answers_total{outcome="refused"}[30m]))
+          / sum(rate(lexeu_answers_total[30m]))
+
+      - alert: LexeuAnswerLatencyHigh
+        expr: lexeu:answer_latency_p95:10m > 2
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 answer latency is {{ $value | humanizeDuration }} (objective: 2 s)"
+          description: >
+            Check generation latency (provider slowdown?) against retrieval latency (TEI, Qdrant)
+            on the Grafana dashboard, then a slow trace in Jaeger or Langfuse.
+
+      - alert: LexeuRefusalRateHigh
+        # Normal: a few percent. A jump means an empty or wrong index, a broken prompt, or a
+        # model change. Needs some traffic to be meaningful.
+        expr: >
+          lexeu:refusal_ratio:30m > 0.3
+          and sum(rate(lexeu_answers_total[30m])) > 0.01
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of answers are refusals"
+          description: >
+            Split by `reason`: not_in_sources (retrieval or prompt), ungrounded or invalid_output
+            (model behaviour), no_sources (index empty or unreachable).
+
+  - name: lexeu-errors
+    rules:
+      - alert: LexeuApiDown
+        expr: sum(up{job="lexeu-api"}) == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: No API instance is answering Prometheus scrapes
+
+      - alert: LexeuLlmErrors
+        expr: >
+          sum(rate(lexeu_llm_errors_total[5m]))
+          / (sum(rate(lexeu_answers_total{cache="miss"}[5m])) + sum(rate(lexeu_llm_errors_total[5m])))
+          > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of generations fail (timeouts, quota)"
+
+      - alert: LexeuHttp5xx
+        expr: >
+          sum(rate(lexeu_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(lexeu_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of requests end in a 5xx"
+
+  - name: lexeu-budget-and-quality
+    rules:
+      - alert: LexeuLlmCostHigh
+        # About 1,250 questions per hour at the measured cost: far above expected traffic.
+        expr: sum(increase(lexeu_llm_cost_usd_total[1h])) > 1
+        labels: { severity: warning }
+        annotations:
+          summary: "LLM spend is ${{ $value | printf \"%.2f\" }} over the last hour"
+          description: Check rate limits and the cache hit rate; look for a single abusive key.
+
+      - alert: LexeuNegativeFeedback
+        expr: >
+          sum(increase(lexeu_feedback_total{rating="down"}[1d]))
+          / sum(increase(lexeu_feedback_total[1d])) > 0.3
+          and sum(increase(lexeu_feedback_total[1d])) >= 10
+        labels: { severity: info }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of feedback is negative today"
+          description: Review the downvoted answers (answer log, feedback table) and add them to the golden set.

@@ -22,6 +22,7 @@ import structlog
 from redis.asyncio import Redis
 
 from lexeu.generation.answer import Answer, Answerer, Citation, Sources, StreamEvent
+from lexeu.observability import spans
 from lexeu.retrieval.search import Hit
 from lexeu.retrieval.sparse import detect_lang
 
@@ -133,15 +134,20 @@ class CachingAnswerer:
             yield event
 
     async def _get(self, question: str, lang: str, start: float) -> Answer | None:
-        try:
-            hit = await self._cache.get(question, lang)
-        except Exception as exc:
-            log.warning("answer_cache_unavailable", error=repr(exc))
-            return None
-        if hit is not None:
-            elapsed = round((time.perf_counter() - start) * 1000, 1)
-            hit.timings_ms = {"cache": elapsed, "total": elapsed}
-        return hit
+        with spans.tracer.start_as_current_span("answer.cache_lookup") as span:
+            try:
+                hit = await self._cache.get(question, lang)
+            except Exception as exc:
+                log.warning("answer_cache_unavailable", error=repr(exc))
+                span.record_exception(exc)
+                return None
+            span.set_attribute("lexeu.answer.cache_hit", hit is not None)
+            if hit is not None:
+                elapsed = round((time.perf_counter() - start) * 1000, 1)
+                hit.timings_ms = {"cache": elapsed, "total": elapsed}
+                spans.start_answer(span, question, lang)
+                spans.finish_answer(span, hit)
+            return hit
 
     async def _put(self, answer: Answer) -> None:
         try:
