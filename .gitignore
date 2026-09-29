@@ -34,3 +34,10 @@ Thumbs.db
 
 # Raw Locust output (summaries in loadtests/results/*.md and *.json are kept)
 loadtests/results/*.csv
+
+# Terraform (lock files are committed; state and variable values are not)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
