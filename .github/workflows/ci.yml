@@ -159,6 +159,11 @@ jobs:
           key: llm-responses-${{ hashFiles('src/lexeu/generation/**', 'src/lexeu/eval/judge.py', 'eval/golden/*.yaml') }}
           restore-keys: llm-responses-
       - name: Answer evaluation with quality gate
+        # Switched by the repository variable ANSWER_GATE=on. Off while the free-tier quotas
+        # (per minute, per day) cannot carry a full judged run: releases are then gated on
+        # retrieval only, and answers are evaluated by hand (`lexeu eval answers`) before a
+        # prompt or model change.
+        if: vars.ANSWER_GATE == 'on'
         run: |
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::notice::GEMINI_API_KEY secret not set: answer gate skipped"
