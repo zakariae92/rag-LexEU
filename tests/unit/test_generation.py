@@ -191,3 +191,20 @@ async def test_load_test_mock_is_explicit_and_answers_with_citations() -> None:
 
     answer = await Answerer(FakeRetriever(SOURCES), llm, k=8).answer("Anything?", lang="en")  # type: ignore[arg-type]
     assert not answer.refused and [c.n for c in answer.citations] == [1, 2]
+
+
+async def test_requests_are_paced_under_the_per_minute_quota() -> None:
+    import asyncio
+    import time
+
+    from lexeu.generation.llm import RequestPacer
+
+    pacer = RequestPacer(per_minute=600)  # one request every 0.1 s
+    start = time.monotonic()
+    await asyncio.gather(*(pacer.wait() for _ in range(4)))  # a burst of four
+    assert time.monotonic() - start >= 0.29  # starts at 0, 0.1, 0.2 and 0.3 s
+
+
+def test_pacing_is_off_unless_configured() -> None:
+    assert LiteLlmClient("gemini/gemini-3.5-flash-lite")._pacer is None
+    assert LiteLlmClient("gemini/gemini-3.5-flash-lite", requests_per_minute=10)._pacer is not None

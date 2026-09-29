@@ -92,6 +92,8 @@ class GenerationSettings(BaseModel):
     timeout_s: float = 30.0
     max_retries: int = 3
     concurrency: int = 4  # parallel questions during evaluation (provider rate limits)
+    # Pace requests per model under the provider's per-minute quota (free tiers); None = no pacing.
+    requests_per_minute: float | None = None
     cache_path: str = "data/llm/responses.sqlite"  # evaluation only: identical calls are free
     # Load tests only: replace the model with a simulated one of this latency. Never in production.
     mock_latency_ms: float | None = None

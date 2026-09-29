@@ -51,6 +51,28 @@ class LlmClient(Completer, Protocol):
         ...
 
 
+class RequestPacer:
+    """Spaces request starts to stay under a provider's requests-per-minute quota.
+
+    Free tiers answer a burst with 429s for the rest of the minute, and a retry inside that
+    minute fails too: pacing the requests is cheaper than retrying them. One pacer per model,
+    because quotas are counted per model.
+    """
+
+    def __init__(self, per_minute: float) -> None:
+        self._interval = 60.0 / per_minute
+        self._next = 0.0
+        self._lock = asyncio.Lock()
+
+    async def wait(self) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            delay = self._next - now
+            self._next = max(now, self._next) + self._interval
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+
 def _supports_reasoning(litellm: Any, model: str) -> bool:
     try:
         return bool(litellm.supports_reasoning(model=model))
@@ -68,8 +90,10 @@ class LiteLlmClient:
         reasoning_effort: str | None = None,
         timeout_s: float = 30.0,
         max_retries: int = 3,
+        requests_per_minute: float | None = None,
     ) -> None:
         self._model = model
+        self._pacer = RequestPacer(requests_per_minute) if requests_per_minute else None
         self._params: dict[str, Any] = {
             "max_tokens": max_tokens,
             "timeout": timeout_s,
@@ -97,6 +121,8 @@ class LiteLlmClient:
 
     async def complete(self, messages: Messages, schema: type[BaseModel]) -> Completion:
         litellm = self._litellm
+        if self._pacer:
+            await self._pacer.wait()
         start = time.perf_counter()
         resp = await litellm.acompletion(
             model=self._model,
@@ -111,6 +137,8 @@ class LiteLlmClient:
         self, messages: Messages, schema: type[BaseModel]
     ) -> AsyncIterator[str | Completion]:
         litellm = self._litellm
+        if self._pacer:
+            await self._pacer.wait()
         start = time.perf_counter()
         first: float | None = None
         resp = await litellm.acompletion(

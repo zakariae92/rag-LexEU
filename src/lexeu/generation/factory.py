@@ -49,6 +49,7 @@ def make_llm(
         reasoning_effort=reasoning_effort or cfg.reasoning_effort,
         timeout_s=cfg.timeout_s,
         max_retries=cfg.max_retries,
+        requests_per_minute=cfg.requests_per_minute,
     )
     if not cache:
         return client, None
