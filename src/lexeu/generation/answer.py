@@ -8,6 +8,7 @@ answer, or the answer cites no valid source (treated as ungrounded, never shown)
 """
 
 import time
+from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from pydantic import ValidationError
 from lexeu.generation.grounding import check_grounding
 from lexeu.generation.llm import Completion, LlmClient
 from lexeu.generation.prompt import PROMPT_VERSION, LlmAnswer, build_messages
+from lexeu.generation.streaming import JsonFieldStream
 from lexeu.retrieval.search import Hit, Retriever
 from lexeu.retrieval.sparse import detect_lang
 
@@ -40,6 +42,16 @@ class Citation:
     citation: str  # human-readable label, e.g. "Art. 33(1) GDPR"
     lang: str
     chunk_id: str
+
+
+@dataclass(frozen=True)
+class Sources:
+    hits: list[Hit]
+
+
+@dataclass(frozen=True)
+class Delta:
+    text: str
 
 
 @dataclass
@@ -70,6 +82,9 @@ class Answer:
         return d
 
 
+StreamEvent = Sources | Delta | Answer
+
+
 class Answerer:
     def __init__(
         self, retriever: Retriever, llm: LlmClient, k: int = 8, expand_chars: int = 0
@@ -80,24 +95,54 @@ class Answerer:
         self._expand_chars = expand_chars  # 0 = give the model the retrieved parts only
 
     async def answer(self, question: str, lang: str | None = None) -> Answer:
+        lang, hits, t_retrieval = await self._retrieve(question, lang)
+        if not hits:
+            return self._refuse(
+                question, lang, "no_sources", hits, None, {"retrieval": t_retrieval}
+            )
+        completion = await self._llm.complete(build_messages(question, hits, lang), LlmAnswer)
+        return self._finish(question, lang, hits, completion, t_retrieval)
+
+    async def stream(self, question: str, lang: str | None = None) -> AsyncIterator[StreamEvent]:
+        """`Sources` right after retrieval, `Delta`s while the model writes, then the `Answer`.
+
+        The final Answer is authoritative: the grounding check runs on the complete text, so a
+        streamed draft can still end as a refusal (clients replace the draft with it).
+        """
+        lang, hits, t_retrieval = await self._retrieve(question, lang)
+        yield Sources(hits)
+        if not hits:
+            yield self._refuse(question, lang, "no_sources", hits, None, {"retrieval": t_retrieval})
+            return
+        field = JsonFieldStream("answer")
+        completion: Completion | None = None
+        async for part in self._llm.stream(build_messages(question, hits, lang), LlmAnswer):
+            if isinstance(part, Completion):
+                completion = part
+            elif text := field.feed(part):
+                yield Delta(text)
+        if completion is None:  # a client that ends its stream without usage breaks the contract
+            raise RuntimeError("LLM stream ended without a final completion")
+        yield self._finish(question, lang, hits, completion, t_retrieval)
+
+    async def _retrieve(self, question: str, lang: str | None) -> tuple[str, list[Hit], float]:
         start = time.perf_counter()
         lang = lang or detect_lang(question)
         hits = await self._retriever.search(question, k=self._k)
         if self._expand_chars:
             hits = await self._retriever.expand(hits, max_chars=self._expand_chars)
-        t_retrieval = (time.perf_counter() - start) * 1000
+        return lang, hits, round((time.perf_counter() - start) * 1000, 1)
 
-        if not hits:
-            return self._refuse(
-                question, lang, "no_sources", hits, None, {"retrieval": t_retrieval}
-            )
-
-        completion = await self._llm.complete(build_messages(question, hits, lang), LlmAnswer)
+    def _finish(
+        self, question: str, lang: str, hits: list[Hit], completion: Completion, t_retrieval: float
+    ) -> Answer:
         timings = {
-            "retrieval": round(t_retrieval, 1),
+            "retrieval": t_retrieval,
             "generation": completion.latency_ms,
             "total": round(t_retrieval + completion.latency_ms, 1),
         }
+        if completion.first_token_ms is not None:  # time to first token, as the user sees it
+            timings["first_token"] = round(t_retrieval + completion.first_token_ms, 1)
 
         try:
             out = LlmAnswer.model_validate_json(completion.content)

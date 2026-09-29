@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from lexeu.generation.answer import Answer
-from lexeu.generation.llm import Completion, LlmClient
+from lexeu.generation.llm import Completer, Completion
 from lexeu.generation.prompt import format_source
 
 JUDGE_VERSION = "1"
@@ -42,7 +42,7 @@ class Verdict(BaseModel):
 
 
 class Judge:
-    def __init__(self, llm: LlmClient) -> None:
+    def __init__(self, llm: Completer) -> None:
         self._llm = llm
 
     @property

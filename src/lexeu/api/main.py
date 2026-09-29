@@ -14,6 +14,7 @@ from lexeu.api.middleware import RequestContextMiddleware
 from lexeu.api.routes import ask, health
 from lexeu.core.config import Settings, get_settings
 from lexeu.core.logging import configure_logging
+from lexeu.core.tls import use_system_trust
 from lexeu.generation.answer import Answerer
 from lexeu.generation.factory import MissingApiKeyError, make_llm
 from lexeu.infra.answer_log import AnswerLog
@@ -30,6 +31,7 @@ log = structlog.get_logger(__name__)
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings)
+    use_system_trust()  # outgoing HTTPS (LLM provider) trusts the OS store, as the CLI does
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

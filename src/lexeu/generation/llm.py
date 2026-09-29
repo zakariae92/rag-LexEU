@@ -11,6 +11,7 @@ import json
 import os
 import sqlite3
 import time
+from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
@@ -31,13 +32,22 @@ class Completion:
     cost_usd: float
     latency_ms: float
     cached: bool = False
+    first_token_ms: float | None = None  # streaming only: when the first text arrived
 
 
-class LlmClient(Protocol):
+class Completer(Protocol):
     @property
     def model_id(self) -> str: ...
 
     async def complete(self, messages: Messages, schema: type[BaseModel]) -> Completion: ...
+
+
+class LlmClient(Completer, Protocol):
+    def stream(
+        self, messages: Messages, schema: type[BaseModel]
+    ) -> AsyncIterator[str | Completion]:
+        """Text chunks as they arrive, then one final Completion (usage, cost, timings)."""
+        ...
 
 
 class LiteLlmClient:
@@ -86,10 +96,38 @@ class LiteLlmClient:
             api_key=self._api_key,
             **self._params,
         )
-        latency = (time.perf_counter() - start) * 1000
+        return self._completion(resp, (time.perf_counter() - start) * 1000)
+
+    async def stream(
+        self, messages: Messages, schema: type[BaseModel]
+    ) -> AsyncIterator[str | Completion]:
+        litellm = self._litellm
+        start = time.perf_counter()
+        first: float | None = None
+        resp = await litellm.acompletion(
+            model=self._model,
+            messages=messages,
+            response_format=schema,
+            api_key=self._api_key,
+            stream=True,
+            stream_options={"include_usage": True},  # usage arrives with the last chunk
+            **self._params,
+        )
+        chunks = []
+        async for chunk in resp:
+            chunks.append(chunk)
+            text = chunk.choices[0].delta.content if chunk.choices else None
+            if text:
+                first = first or (time.perf_counter() - start) * 1000
+                yield text
+        full = litellm.stream_chunk_builder(chunks)
+        completion = self._completion(full, (time.perf_counter() - start) * 1000)
+        yield replace(completion, first_token_ms=round(first, 1) if first else None)
+
+    def _completion(self, resp: Any, latency_ms: float) -> Completion:
         usage = getattr(resp, "usage", None)
         try:
-            cost = float(litellm.completion_cost(completion_response=resp))
+            cost = float(self._litellm.completion_cost(completion_response=resp))
         except Exception:  # model missing from the price table: report 0 rather than fail
             cost = 0.0
         return Completion(
@@ -98,7 +136,7 @@ class LiteLlmClient:
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
             cost_usd=cost,
-            latency_ms=round(latency, 1),
+            latency_ms=round(latency_ms, 1),
         )
 
 
@@ -160,3 +198,10 @@ class CachedLlm:
         completion = await self._inner.complete(messages, schema)
         self._cache.put(key, completion)
         return completion
+
+    async def stream(
+        self, messages: Messages, schema: type[BaseModel]
+    ) -> AsyncIterator[str | Completion]:
+        completion = await self.complete(messages, schema)  # evaluation path: no real streaming
+        yield completion.content
+        yield completion

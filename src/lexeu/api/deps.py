@@ -54,5 +54,6 @@ async def caller(request: Request, response: Response) -> Caller:
             headers={**headers, "Retry-After": str(decision.retry_after_s)},
         )
     response.headers.update(headers)
+    request.state.rate_limit_headers = headers  # for streaming responses, built by hand
     structlog.contextvars.bind_contextvars(caller=key.name if key else who.subject)
     return who
