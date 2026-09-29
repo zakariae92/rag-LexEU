@@ -89,7 +89,7 @@ class StreamingAnswerer(FakeAnswerer):
         self.fail = fail
 
     async def stream(self, question: str, lang: str | None = None) -> AsyncIterator[object]:
-        yield Sources([])
+        yield Sources(SOURCES)
         yield Delta("Within 72 ")
         if self.fail:
             raise TimeoutError("provider timed out")
@@ -117,6 +117,7 @@ def test_sse_events_in_order(app: FastAPI, client: TestClient) -> None:
     answer_id = events[0][1]["answer_id"]
     assert events[-1][1]["answer_id"] == answer_id
     assert events[-1][1]["citations"][0]["citation"] == "Art. 33(1) GDPR"
+    assert events[0][1]["sources"][0]["url"].endswith("CELEX:32016R0679#art_33")
     assert answer_id in app.state.answer_log.answers  # logged once the stream is complete
 
 

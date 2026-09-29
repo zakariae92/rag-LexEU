@@ -32,11 +32,22 @@ class AskRequest(BaseModel):
     )
 
 
+EURLEX = "https://eur-lex.europa.eu/legal-content/{lang}/TXT/HTML/?uri=CELEX:{celex}#{anchor}"
+
+
+def eurlex_url(provision_key: str, lang: str) -> str:
+    """The provision in the official text: EUR-Lex anchors articles and recitals by their ELI id
+    ("art_33", "rct_115"), which the provision key carries ("32016R0679:art_33:p1")."""
+    celex, anchor = provision_key.split(":")[:2]
+    return EURLEX.format(lang=lang.upper(), celex=celex, anchor=anchor)
+
+
 class CitationOut(BaseModel):
     n: int
     citation: str
     provision_key: str
     lang: str
+    url: str  # the provision on EUR-Lex, in the answer's language
 
 
 class Usage(BaseModel):
@@ -66,7 +77,13 @@ class AskResponse(BaseModel):
             refused=a.refused,
             refusal_reason=a.refusal_reason,
             citations=[
-                CitationOut(n=c.n, citation=c.citation, provision_key=c.provision_key, lang=c.lang)
+                CitationOut(
+                    n=c.n,
+                    citation=c.citation,
+                    provision_key=c.provision_key,
+                    lang=c.lang,
+                    url=eurlex_url(c.provision_key, c.lang),
+                )
                 for c in a.citations
             ],
             usage=Usage(
@@ -139,7 +156,12 @@ async def ask_stream(
             async for event in answerer.stream(body.question, lang=body.lang):
                 if isinstance(event, Sources):
                     sources = [
-                        {"n": i, "citation": h.citation, "provision_key": h.provision_key}
+                        {
+                            "n": i,
+                            "citation": h.citation,
+                            "provision_key": h.provision_key,
+                            "url": eurlex_url(h.provision_key, h.lang),
+                        }
                         for i, h in enumerate(event.hits, start=1)
                     ]
                     yield _sse("sources", {"answer_id": answer_id, "sources": sources})

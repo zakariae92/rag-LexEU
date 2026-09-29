@@ -40,6 +40,7 @@ def test_ask_returns_answer_citations_and_usage(app: FastAPI, client: TestClient
             "citation": "Art. 33(1) GDPR",
             "provision_key": "32016R0679:art_33:p1",
             "lang": "en",
+            "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679#art_33",
         }
     ]
     assert body["usage"]["cost_usd"] == 0.0008
