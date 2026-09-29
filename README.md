@@ -43,7 +43,7 @@ Key decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr/).
 - [x] **M3 · Retrieval**: 14-config ablation (dense, BM25 hybrid, recital policy, cross-encoder rerankers), production config chosen by the numbers, CI gate raised
 - [x] **M4 · Generation**: LiteLLM gateway, cited answers, explicit refusals, grounding checks, LLM judge, CI answer gate (p95 1.6 s, $0.79 per 1,000 questions)
 - [x] **M5 · Backend**: API keys, Redis rate limiting, SSE streaming, answer log and feedback, exact-match answer cache (a semantic cache was measured and rejected)
-- [ ] **M6 · Observability**: Langfuse, OpenTelemetry, Grafana dashboards, alerts, load tests
+- [x] **M6 · Observability**: Prometheus metrics, OpenTelemetry traces (Jaeger + Langfuse), Grafana dashboard, unit-tested alerts, load tests (capacity ~6 answers/s per embedding server), admission control
 - [ ] **M7 · UI & delivery**: Next.js chat, CI eval gate, Terraform deployment
 - [ ] **M8 · Results**: ablation tables, demo video
 
@@ -208,6 +208,27 @@ curl -N http://127.0.0.1:8080/v1/ask/stream -H "Authorization: Bearer lx_..."   
   exactly instead: a repeat costs 1.6 ms and $0, and a new index or prompt invalidates it.
 
 Design: [ADR 0008](docs/adr/0008-serving.md).
+
+## Observability (M6)
+
+```bash
+docker compose --profile obs up -d --wait   # Grafana :3000, Prometheus :9090, Jaeger :16686
+uv run python loadtests/run.py --users 1 5 10 20 --label my-run   # stepped load test (Locust)
+```
+
+- **Metrics** on `/metrics`: latency per stage, refusals by reason, cache hits, tokens, **cost**,
+  errors, rate limiting, load shedding, feedback. A provisioned Grafana dashboard shows them.
+- **Traces** (OpenTelemetry, one span per stage) go to Jaeger and to Langfuse Cloud. They found
+  the first real problem: an idle embedding server paged out to disk, costing 11 s on the first
+  request. The API now warms it at startup.
+- **Alerts** fire on symptoms (p95 over 2 s, refusal spikes, errors, hourly spend, negative
+  feedback), and each rule has a `promtool` unit test in CI.
+- **Capacity:** one deployment keeps p95 under 2 s up to about 10 concurrent users, then
+  saturates at about 6 answers/s on CPU query embedding ([results](loadtests/results/)). Past that,
+  admission control sheds the excess with a fast 503: at 2x capacity, p99 drops from 9.1 s to
+  3.1 s for admitted users.
+
+Design: [ADR 0009](docs/adr/0009-observability.md).
 
 ## Project layout
 
