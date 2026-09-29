@@ -14,9 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from lexeu.commands.index import make_embedder
-from lexeu.core.config import get_settings
+from lexeu.core.config import Settings, get_settings
 from lexeu.core.logging import configure_logging
 from lexeu.eval.golden import (
+    GoldenSet,
     Review,
     load_golden,
     load_reviews,
@@ -24,10 +25,18 @@ from lexeu.eval.golden import (
     status_of,
 )
 from lexeu.eval.metrics import matches
-from lexeu.eval.retrieval import RetrievalReport, check_gate, evaluate_retrieval, to_markdown
-from lexeu.infra.db import ChunkRow, SqlIndexRegistry
+from lexeu.eval.retrieval import (
+    RetrievalReport,
+    ablation_markdown,
+    check_gate,
+    evaluate_retrieval,
+    to_markdown,
+)
+from lexeu.infra.db import ChunkRow, IndexRecord, SqlIndexRegistry
+from lexeu.retrieval.config import RetrievalConfig, load_experiments
 from lexeu.retrieval.index import ensure_same_model
-from lexeu.retrieval.search import DenseRetriever
+from lexeu.retrieval.rerank import make_reranker, remote_rerankers
+from lexeu.retrieval.search import Retriever
 
 app = typer.Typer(help="Evaluate the system against the golden set.", no_args_is_help=True)
 console = Console()
@@ -71,46 +80,69 @@ async def _validate(golden: Path | None) -> None:
     console.print("[green]All expected provisions exist in the corpus.[/]")
 
 
+ExperimentOpt = Annotated[
+    str | None, typer.Option("--experiment", "-e", help="Config name in the experiments file.")
+]
+
+
 @app.command()
 def retrieval(
     golden: GoldenOpt = None,
+    experiment: ExperimentOpt = None,
     k: Annotated[int, typer.Option(help="Cut-off for metrics.")] = 10,
     gate: Annotated[bool, typer.Option(help="Fail if below eval/thresholds.yaml.")] = False,
     mlflow: Annotated[bool, typer.Option(help="Log the run to MLflow.")] = False,
     run_name: Annotated[str | None, typer.Option(help="MLflow run name.")] = None,
 ) -> None:
-    """Run the golden set through the retriever: hit@k, recall, MRR, nDCG per slice."""
-    raise typer.Exit(asyncio.run(_retrieval(golden, k, gate, mlflow, run_name)))
+    """Run the golden set through one retrieval config: hit@k, recall, MRR, nDCG per slice."""
+    raise typer.Exit(asyncio.run(_retrieval(golden, experiment, k, gate, mlflow, run_name)))
 
 
-async def _retrieval(
-    golden: Path | None, k: int, gate: bool, use_mlflow: bool, run_name: str | None
-) -> int:
-    settings = get_settings()
-    configure_logging(settings)
-    path = golden or Path(settings.eval.golden_path)
-    gs = load_golden(path)
+@app.command()
+def ablation(
+    golden: GoldenOpt = None,
+    only: Annotated[
+        list[str] | None, typer.Option("--only", help="Run only these configs (repeatable).")
+    ] = None,
+    k: Annotated[int, typer.Option(help="Cut-off for metrics.")] = 10,
+    mlflow: Annotated[bool, typer.Option(help="Log every config as an MLflow run.")] = False,
+) -> None:
+    """Run every config of the experiments file and compare them to the first one (baseline)."""
+    asyncio.run(_ablation(golden, only, k, mlflow))
 
+
+def _experiments(settings: Settings) -> dict[str, RetrievalConfig]:
+    path = Path(settings.eval.experiments_path)
+    configs = load_experiments(path) if path.exists() else [RetrievalConfig()]
+    return {c.name: c for c in configs}
+
+
+async def _run_configs(
+    settings: Settings, gs: GoldenSet, configs: list[RetrievalConfig], k: int
+) -> tuple[IndexRecord, list[tuple[RetrievalConfig, RetrievalReport]]]:
     engine = create_async_engine(settings.postgres.dsn)
     qdrant = AsyncQdrantClient(url=settings.qdrant.url)
     embedder, tei, cache = make_embedder(settings)
+    results: list[tuple[RetrievalConfig, RetrievalReport]] = []
     try:
         index = await ensure_same_model(SqlIndexRegistry(engine), embedder.model_id)
-        report = await evaluate_retrieval(gs.items, DenseRetriever(qdrant, embedder), k=k)
+        async with remote_rerankers(any(c.rerank for c in configs)):
+            for cfg in configs:
+                reranker = make_reranker(settings, cfg.rerank) if cfg.rerank else None
+                retriever = Retriever(qdrant, embedder, cfg, reranker=reranker)
+                console.print(f"[dim]running '{cfg.name}'...[/]")
+                results.append((cfg, await evaluate_retrieval(gs.items, retriever, k=k)))
     finally:
         await tei.aclose()
         cache.close()
         await qdrant.close()
         await engine.dispose()
+    return index, results
 
-    markdown = to_markdown(report, title=f"Retrieval: dense {index.model_id}, k={k}")
-    out_dir = Path(settings.eval.reports_dir)
-    _write_reports(out_dir, report, markdown)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    console.print(Markdown(markdown))
 
-    params = {
-        "retriever": "dense",
+def _params(cfg: RetrievalConfig, index: IndexRecord, gs: GoldenSet, k: int) -> dict[str, Any]:
+    return {
+        **cfg.model_dump(exclude={"description"}),
         "embedding_model": index.model_id,
         "index_collection": index.collection,
         "index_fingerprint": index.fingerprint,
@@ -118,8 +150,35 @@ async def _retrieval(
         "golden_items": len(gs.items),
         "k": k,
     }
+
+
+async def _retrieval(
+    golden: Path | None,
+    experiment: str | None,
+    k: int,
+    gate: bool,
+    use_mlflow: bool,
+    run_name: str | None,
+) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    gs = load_golden(golden or Path(settings.eval.golden_path))
+    configs = _experiments(settings)
+    name = experiment or settings.eval.default_experiment
+    if name not in configs:
+        raise typer.BadParameter(f"unknown experiment {name!r}; known: {sorted(configs)}")
+
+    index, [(cfg, report)] = await _run_configs(settings, gs, [configs[name]], k)
+
+    markdown = to_markdown(report, title=f"Retrieval: {cfg.name} ({index.model_id}), k={k}")
+    out_dir = Path(settings.eval.reports_dir)
+    _write_reports(out_dir, report, markdown)
+    console.print(Markdown(markdown))
+
     if use_mlflow:
-        _log_mlflow(settings.eval, params, report, out_dir, run_name or f"dense-{stamp}")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        params = _params(cfg, index, gs, k)
+        _log_mlflow(settings.eval, params, report, out_dir, run_name or f"{cfg.name}-{stamp}")
 
     if gate:
         failures = check_gate(report, Path(settings.eval.thresholds_path))
@@ -130,6 +189,29 @@ async def _retrieval(
             return 1
         console.print("[green bold]Quality gate passed[/]")
     return 0
+
+
+async def _ablation(golden: Path | None, only: list[str] | None, k: int, use_mlflow: bool) -> None:
+    settings = get_settings()
+    configure_logging(settings)
+    gs = load_golden(golden or Path(settings.eval.golden_path))
+    configs = [c for c in _experiments(settings).values() if not only or c.name in only]
+
+    index, results = await _run_configs(settings, gs, configs, k)
+
+    markdown = ablation_markdown(results, k)
+    out_dir = Path(settings.eval.reports_dir)
+    _write_ablation(out_dir, markdown)
+    console.print(Markdown(markdown))
+    if use_mlflow:
+        for cfg, report in results:
+            _write_reports(out_dir, report, to_markdown(report, title=cfg.name))
+            _log_mlflow(settings.eval, _params(cfg, index, gs, k), report, out_dir, cfg.name)
+
+
+def _write_ablation(out_dir: Path, markdown: str) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "ablation_latest.md").write_text(markdown, encoding="utf-8")
 
 
 def _write_reports(out_dir: Path, report: RetrievalReport, markdown: str) -> None:

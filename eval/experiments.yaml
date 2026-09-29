@@ -1,0 +1,96 @@
+# Retrieval experiments (M3). The first entry is the baseline every other row is compared to.
+# Run all:  uv run lexeu eval ablation --mlflow
+# Run one:  uv run lexeu eval retrieval -e <name>
+# The config used by the CI gate (and later the API) is `eval.default_experiment` in settings.
+
+experiments:
+  - name: dense
+    description: "M2 baseline: BGE-M3 dense, both languages, recitals kept"
+    mode: dense
+
+  # ---------------------------------------------------------------- wave A: ranking policies
+  - name: dense-lang
+    description: only chunks in the question's language
+    mode: dense
+    lang: query
+
+  - name: dense-recitals-demote
+    description: recital scores x0.9 so articles win close calls
+    mode: dense
+    recitals: demote
+    recital_penalty: 0.9
+
+  - name: dense-recitals-exclude
+    description: recitals never returned
+    mode: dense
+    recitals: exclude
+
+  # ---------------------------------------------------------------- wave B: hybrid search
+  - name: hybrid-rrf
+    description: dense + BM25 (EN/FR stemming), reciprocal rank fusion
+    mode: hybrid
+    fusion: rrf
+
+  - name: hybrid-dbsf
+    description: dense + BM25, distribution-based score fusion
+    mode: hybrid
+    fusion: dbsf
+
+  - name: hybrid-rrf-demote
+    description: hybrid RRF + recital demotion
+    mode: hybrid
+    fusion: rrf
+    recitals: demote
+    recital_penalty: 0.9
+
+  - name: hybrid-rrf-exclude
+    description: hybrid RRF without recitals
+    mode: hybrid
+    fusion: rrf
+    recitals: exclude
+
+  # ---------------------------------------------------------------- wave B diagnostics
+  - name: sparse-only
+    description: BM25 alone, to understand why the fusion hurts
+    mode: sparse
+
+  - name: hybrid-w3-demote
+    description: weighted RRF (dense counts 3x BM25) + recital demotion
+    mode: hybrid
+    fusion: rrf
+    dense_weight: 3.0
+    recitals: demote
+    recital_penalty: 0.9
+
+  # ---------------------------------------------------------------- wave C: cross-encoder rerank
+  - name: rerank-bge-m3
+    description: dense + recital demotion, top 30 reranked by bge-reranker-v2-m3 (568M)
+    mode: dense
+    recitals: demote
+    recital_penalty: 0.9
+    rerank: BAAI/bge-reranker-v2-m3
+    rerank_top: 30
+
+  - name: rerank-minilm
+    description: same, reranked by mmarco-mMiniLMv2 (118M, CPU-sized)
+    mode: dense
+    recitals: demote
+    recital_penalty: 0.9
+    rerank: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+    rerank_top: 30
+
+  - name: rerank-bge-m3-top10
+    description: bge-reranker-v2-m3 on the top 10 only (latency vs quality)
+    mode: dense
+    recitals: demote
+    recital_penalty: 0.9
+    rerank: BAAI/bge-reranker-v2-m3
+    rerank_top: 10
+
+  - name: rerank-bge-m3-top20
+    description: bge-reranker-v2-m3 on the top 20
+    mode: dense
+    recitals: demote
+    recital_penalty: 0.9
+    rerank: BAAI/bge-reranker-v2-m3
+    rerank_top: 20

@@ -179,6 +179,33 @@ def to_markdown(report: RetrievalReport, title: str = "Retrieval evaluation") ->
     return "\n".join(lines) + "\n"
 
 
+def ablation_markdown(results: list[tuple[Any, RetrievalReport]], k: int) -> str:
+    """One row per config, with the delta against the first one (the baseline)."""
+    cols = ["hit@1", "hit@5", f"hit@{k}", f"mrr@{k}", f"ndcg@{k}"]
+    slices = ["definition", "temporal", "cross_regulation"]
+    base_cfg, base = results[0]
+    header = (
+        "| Config | "
+        + " | ".join(cols)
+        + " | "
+        + " | ".join(f"hit@5 {s}" for s in slices)
+        + " | p95 ms |"
+    )
+    lines = [f"## Retrieval ablation (k={k}, baseline = `{base_cfg.name}`)", "", header]
+    lines.append("|---" * (len(cols) + len(slices) + 2) + "|")
+    for cfg, rep in results:
+        cells = []
+        for c in cols:
+            v, b = rep.overall.get(c, 0.0), base.overall.get(c, 0.0)
+            cells.append(f"{v:.3f}" if cfg is base_cfg else f"{v:.3f} ({v - b:+.3f})")
+        for sl in slices:
+            cells.append(f"{rep.by_category.get(sl, {}).get('hit@5', 0.0):.3f}")
+        lines.append(f"| `{cfg.name}` | " + " | ".join(cells) + f" | {rep.latency_ms['p95']} |")
+    lines.append("")
+    lines += [f"- `{cfg.name}`: {cfg.description}" for cfg, _ in results if cfg.description]
+    return "\n".join(lines) + "\n"
+
+
 # ------------------------------------------------------------------------------ quality gate
 
 

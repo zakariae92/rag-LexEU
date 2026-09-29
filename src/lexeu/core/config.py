@@ -63,6 +63,8 @@ class EmbeddingSettings(BaseModel):
 
 class EvalSettings(BaseModel):
     golden_path: str = "eval/golden/golden_v1.yaml"
+    experiments_path: str = "eval/experiments.yaml"
+    default_experiment: str = "dense-recitals-demote"  # used by the CI gate and the API (M3)
     thresholds_path: str = "eval/thresholds.yaml"
     reports_dir: str = "eval/reports"
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
