@@ -1,4 +1,4 @@
-"""`lexeu eval validate | retrieval | ablation | answers | review`."""
+"""`lexeu eval validate | retrieval | ablation | answers | cache | review`."""
 
 import asyncio
 import json
@@ -20,6 +20,8 @@ from lexeu.core.logging import configure_logging
 from lexeu.eval.answers import AnswerItem, AnswerReport, evaluate_answers
 from lexeu.eval.answers import check_gate as check_answers_gate
 from lexeu.eval.answers import to_markdown as answers_markdown
+from lexeu.eval.cache import check_lang_consistency, evaluate_cache, load_pairs
+from lexeu.eval.cache import to_markdown as cache_markdown
 from lexeu.eval.golden import (
     GoldenSet,
     Review,
@@ -391,6 +393,43 @@ def _log_answers_mlflow(
         mlflow.log_artifact(str(out_dir / "answers_latest.json"))
         mlflow.log_artifact(str(out_dir / "answers_latest.md"))
     console.print(f"[dim]Logged to MLflow, run '{run_name}'.[/]")
+
+
+@app.command()
+def cache(
+    golden: GoldenOpt = None,
+    pairs: Annotated[Path, typer.Option(help="Paraphrase / near-miss pairs.")] = Path(
+        "eval/golden/cache_pairs_v1.yaml"
+    ),
+) -> None:
+    """Choose the semantic-cache similarity threshold: paraphrase hits vs wrong-question hits."""
+    asyncio.run(_cache(golden, pairs))
+
+
+async def _cache(golden: Path | None, pairs_path: Path) -> None:
+    settings = get_settings()
+    configure_logging(settings)
+    gs = load_golden(golden or Path(settings.eval.golden_path))
+    pairs = load_pairs(pairs_path)
+    for mismatch in check_lang_consistency(pairs):
+        console.print(f"[yellow]language differs from its base: {mismatch}[/]")
+    embedder, tei, emb_cache = make_embedder(settings)
+    try:
+        report = await evaluate_cache(pairs, gs.items, embedder)
+    finally:
+        await tei.aclose()
+        emb_cache.close()
+    markdown = cache_markdown(report)
+    _write_cache_report(Path(settings.eval.reports_dir), report.as_dict(), markdown)
+    console.print(Markdown(markdown))
+
+
+def _write_cache_report(out_dir: Path, data: dict[str, Any], markdown: str) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "cache_latest.json").write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    (out_dir / "cache_latest.md").write_text(markdown, encoding="utf-8")
 
 
 @app.command()

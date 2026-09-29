@@ -1,0 +1,175 @@
+# Semantic cache evaluation set v1.
+#
+# A semantic cache answers a new question with the stored answer of a similar one. The threshold
+# on embedding similarity decides between two failures:
+#   - too high: paraphrases miss the cache (cost and latency, harmless);
+#   - too low: a near-miss hits it and gets the answer to ANOTHER question (wrong legal advice).
+# `same: true`  -> paraphrase: the stored answer is correct for the variant (a hit is welcome).
+# `same: false` -> near-miss: same topic, different answer (a hit is a serious error).
+# Near-misses change one thing that changes the answer: the actor, the recipient, the regulation,
+# a figure, the article, the direction of a rule, or the premise.
+# Every pair of distinct golden-set questions is also used as a negative by `lexeu eval cache`.
+# Status: draft, written by the maintainers, to be reviewed like the golden set.
+
+version: 1
+pairs:
+  # ------------------------------------------------------------------ GDPR
+  - base: What are the lawful bases for processing personal data under the GDPR?
+    variants:
+      - {same: true, text: "On what legal grounds can personal data be processed under the GDPR?"}
+      - {same: true, text: "Which legal bases make processing of personal data lawful according to the GDPR?"}
+      - {same: false, text: "What are the conditions for processing special categories of personal data under the GDPR?"}
+      - {same: false, text: "What are the lawful bases for processing personal data under the Law Enforcement Directive?"}
+  - base: When must an organisation designate a data protection officer?
+    variants:
+      - {same: true, text: "In which cases is it mandatory to appoint a DPO?"}
+      - {same: true, text: "When is an organisation required to appoint a data protection officer?"}
+      - {same: false, text: "What are the tasks of a data protection officer?"}
+      - {same: false, text: "Can a data protection officer be dismissed for performing their tasks?"}
+  - base: How long does a controller have to respond to a data subject request?
+    variants:
+      - {same: true, text: "What is the deadline for a controller to answer a data subject's request?"}
+      - {same: true, text: "Within what time limit must the controller reply to a request from a data subject?"}
+      - {same: false, text: "How long can a controller keep personal data?"}
+      - {same: false, text: "How long does a supervisory authority have to handle a complaint?"}
+  - base: Within how many hours must a controller notify a personal data breach to the supervisory authority?
+    variants:
+      - {same: true, text: "What is the deadline to report a data breach to the supervisory authority?"}
+      - {same: true, text: "How quickly must a data breach be notified to the data protection authority?"}
+      - {same: false, text: "When must a controller inform the data subjects themselves about a personal data breach?"}
+      - {same: false, text: "Within how many hours must a processor notify a personal data breach to the controller?"}
+      - {same: false, text: "Within how many hours must a significant incident be notified to the CSIRT under NIS2?"}
+      - {same: false, text: "Why does the GDPR give controllers 48 hours to notify a data breach?"}
+  - base: How does the GDPR define personal data?
+    variants:
+      - {same: true, text: "What is the GDPR definition of personal data?"}
+      - {same: true, text: "What counts as personal data under the GDPR?"}
+      - {same: false, text: "How does the GDPR define pseudonymisation?"}
+      - {same: false, text: "How does the Data Act define non-personal data?"}
+  - base: What rules apply to decisions based solely on automated processing, including profiling?
+    variants:
+      - {same: true, text: "What does the GDPR say about fully automated decision-making and profiling?"}
+      - {same: false, text: "What rules apply to automatic recording of events (logs) by high-risk AI systems?"}
+  - base: What security measures does the GDPR require for processing personal data?
+    variants:
+      - {same: true, text: "Which technical and organisational security measures must controllers implement under the GDPR?"}
+      - {same: false, text: "What cybersecurity risk-management measures does NIS2 require?"}
+  - base: What fines can be imposed for infringing the GDPR?
+    variants:
+      - {same: true, text: "What is the maximum administrative fine under the GDPR?"}
+      - {same: false, text: "What fines can be imposed for infringing the AI Act?"}
+      - {same: false, text: "What fines can be imposed for infringing the Digital Services Act?"}
+  - base: À partir de quel âge un enfant peut-il consentir seul au traitement de ses données par un service de la société de l'information ?
+    variants:
+      - {same: true, text: "Quel est l'âge minimum pour qu'un mineur consente seul au traitement de ses données en ligne ?"}
+      - {same: false, text: "Un enfant peut-il faire l'objet d'une publicité ciblée fondée sur le profilage sur une plateforme en ligne ?"}
+  - base: Quelle est la définition des données à caractère personnel dans le RGPD ?
+    variants:
+      - {same: true, text: "Comment le RGPD définit-il les données personnelles ?"}
+      - {same: false, text: "Comment le RGPD définit-il le responsable du traitement ?"}
+      - {same: false, text: "Comment le RGPD définit-il le sous-traitant ?"}
+
+  # ------------------------------------------------------------------ AI Act
+  - base: Which AI practices are prohibited under the AI Act?
+    variants:
+      - {same: true, text: "What uses of AI does the AI Act ban?"}
+      - {same: true, text: "Which artificial intelligence practices are forbidden by the AI Act?"}
+      - {same: false, text: "Which AI systems are classified as high-risk under the AI Act?"}
+      - {same: false, text: "Which AI practices are allowed under the AI Act?"}
+  - base: Who must carry out a fundamental rights impact assessment before deploying a high-risk AI system?
+    variants:
+      - {same: true, text: "Which deployers have to perform a fundamental rights impact assessment for high-risk AI?"}
+      - {same: false, text: "Who must carry out a data protection impact assessment under the GDPR?"}
+      - {same: false, text: "Who must carry out the conformity assessment of a high-risk AI system?"}
+  - base: What additional obligations apply to providers of general-purpose AI models with systemic risk?
+    variants:
+      - {same: true, text: "What extra duties do providers of GPAI models with systemic risk have?"}
+      - {same: false, text: "What obligations apply to all providers of general-purpose AI models?"}
+      - {same: false, text: "When is a general-purpose AI model presumed to have systemic risk?"}
+  - base: How does the AI Act define an AI system?
+    variants:
+      - {same: true, text: "What is the definition of an AI system in the AI Act?"}
+      - {same: false, text: "How does the AI Act define a general-purpose AI model?"}
+      - {same: false, text: "How does the AI Act define a deployer?"}
+  - base: Quel est le montant maximal de l'amende en cas de pratique d'IA interdite ?
+    variants:
+      - {same: true, text: "Quelle est l'amende maximale pour une pratique d'intelligence artificielle interdite ?"}
+      - {same: false, text: "Quel est le montant maximal de l'amende pour la fourniture d'informations inexactes aux autorités ?"}
+      - {same: false, text: "Quel est le montant maximal de l'amende en cas de violation du RGPD ?"}
+  - base: What does human oversight of high-risk AI systems require?
+    variants:
+      - {same: true, text: "What are the human oversight requirements for high-risk AI?"}
+      - {same: false, text: "What does the transparency obligation for chatbots require?"}
+
+  # ------------------------------------------------------------------ DORA
+  - base: Which financial entities fall within the scope of DORA?
+    variants:
+      - {same: true, text: "To which financial entities does DORA apply?"}
+      - {same: false, text: "Which entities fall within the scope of NIS2?"}
+      - {same: false, text: "Which ICT third-party service providers are designated as critical under DORA?"}
+  - base: What contractual provisions must ICT services agreements include under DORA?
+    variants:
+      - {same: true, text: "Which clauses are mandatory in contracts with ICT third-party service providers under DORA?"}
+      - {same: false, text: "What additional provisions must contracts for ICT services supporting critical functions include?"}
+      - {same: false, text: "What must a data processing agreement between controller and processor include under the GDPR?"}
+  - base: Les entités financières doivent-elles notifier les incidents majeurs liés aux TIC ?
+    variants:
+      - {same: true, text: "Un incident majeur lié aux TIC doit-il être signalé par une entité financière ?"}
+      - {same: false, text: "Les entités financières doivent-elles notifier les cybermenaces importantes ?"}
+      - {same: false, text: "Les entités essentielles doivent-elles notifier les incidents importants selon NIS2 ?"}
+  - base: What backup and restoration policies must financial entities have?
+    variants:
+      - {same: true, text: "What does DORA require for backups and data restoration?"}
+      - {same: false, text: "What business continuity policy must financial entities have?"}
+
+  # ------------------------------------------------------------------ NIS2
+  - base: What must management bodies of essential and important entities do under NIS2?
+    variants:
+      - {same: true, text: "What are the responsibilities of management bodies under NIS2?"}
+      - {same: false, text: "What must management bodies of financial entities do under DORA?"}
+  - base: What supervisory measures can authorities apply to essential entities?
+    variants:
+      - {same: true, text: "Which supervisory powers do authorities have over essential entities under NIS2?"}
+      - {same: false, text: "What supervisory measures can authorities apply to important entities?"}
+      - {same: false, text: "What enforcement measures can authorities impose on essential entities?"}
+
+  # ------------------------------------------------------------------ DSA
+  - base: Under what conditions is a hosting provider exempt from liability?
+    variants:
+      - {same: true, text: "When is a hosting service not liable for the information it stores?"}
+      - {same: false, text: "Under what conditions is a caching provider exempt from liability?"}
+      - {same: false, text: "Under what conditions is a mere conduit provider exempt from liability?"}
+  - base: How must online platforms treat notices from trusted flaggers?
+    variants:
+      - {same: true, text: "How should platforms handle reports submitted by trusted flaggers?"}
+      - {same: false, text: "How does an entity obtain the status of trusted flagger?"}
+  - base: What must online platforms accessible to minors do?
+    variants:
+      - {same: true, text: "What are the obligations of online platforms towards minors?"}
+      - {same: false, text: "What must very large online platforms do to assess systemic risks?"}
+  - base: Les interfaces trompeuses sont-elles interdites par le règlement sur les services numériques ?
+    variants:
+      - {same: true, text: "Le DSA interdit-il les dark patterns ?"}
+      - {same: false, text: "La publicité ciblée fondée sur des données sensibles est-elle interdite par le DSA ?"}
+
+  # ------------------------------------------------------------------ Data Act
+  - base: What must cloud providers do to prevent unlawful international governmental access to non-personal data?
+    variants:
+      - {same: true, text: "How must data processing service providers protect non-personal data against unlawful foreign government access?"}
+      - {same: false, text: "What must cloud providers do to allow customers to switch to another provider?"}
+  - base: What is the rule on unfair contractual terms concerning data access imposed unilaterally on an enterprise?
+    variants:
+      - {same: true, text: "When is a data-sharing contractual term unilaterally imposed on a company unfair under the Data Act?"}
+      - {same: false, text: "What is the rule on unfair terms in consumer contracts?"}
+
+  # ------------------------------------------------------------------ dates
+  - base: From when does the GDPR apply?
+    variants:
+      - {same: true, text: "What is the date of application of the GDPR?"}
+      - {same: false, text: "From when does the AI Act apply?"}
+      - {same: false, text: "From when does DORA apply?"}
+      - {same: false, text: "When did the GDPR enter into force?"}
+  - base: From when do the AI Act's prohibitions on AI practices apply?
+    variants:
+      - {same: true, text: "When do the bans on prohibited AI practices take effect?"}
+      - {same: false, text: "From when do the AI Act's obligations for general-purpose AI models apply?"}
