@@ -1,0 +1,27 @@
+# Public entry point: HTTPS certificates are obtained and renewed automatically (Let's Encrypt).
+{$LEXEU_DOMAIN} {
+	encode {
+		zstd
+		gzip
+		# Not text/event-stream: the answer stream must reach the browser token by token.
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/plain*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type image/svg+xml*
+		}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	@api path /v1/* /docs /docs/* /openapi.json /health /ready
+	route {
+		respond /metrics* 404 # Prometheus metrics are internal
+		reverse_proxy @api api:8000
+		reverse_proxy ui:3000
+	}
+}

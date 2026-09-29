@@ -1,0 +1,135 @@
+# rag-LexEU production stack, on one VM (Oracle Cloud Always Free: 4 ARM cores, 24 GB).
+#
+#   internet ──443──► caddy ─┬─ /v1/*, /docs ──► api ──► embeddings, qdrant, postgres, redis
+#                            └─ everything else ──► ui ──(API key, server-side)──► api
+#
+# Only Caddy publishes ports (80 for the certificate challenge and the redirect, 443). Everything
+# else lives on the internal network. Images are built by CI (linux/arm64) and pinned by commit:
+#
+#   cd /opt/lexeu && docker compose -f compose.prod.yml pull && docker compose -f compose.prod.yml up -d --wait
+#
+# Settings come from .env next to this file (see .env.example); each service receives only the
+# variables it needs.
+
+name: lexeu
+
+x-service: &service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  caddy:
+    <<: *service
+    image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      LEXEU_DOMAIN: ${LEXEU_DOMAIN:?set LEXEU_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates: keep them, Let's Encrypt rate-limits re-issuance
+      - caddy_config:/config
+    depends_on:
+      api: { condition: service_healthy }
+      ui: { condition: service_healthy }
+    deploy: { resources: { limits: { memory: 256m } } }
+
+  ui:
+    <<: *service
+    image: ghcr.io/zakariae92/rag-lexeu-ui:${LEXEU_TAG:-latest}
+    environment:
+      LEXEU_API_URL: http://api:8000
+      LEXEU_API_KEY: ${UI_API_KEY:?create the UI key, see .env.example}
+    depends_on:
+      api: { condition: service_healthy }
+    deploy: { resources: { limits: { memory: 512m } } }
+
+  api:
+    <<: *service
+    image: ghcr.io/zakariae92/rag-lexeu-api:${LEXEU_TAG:-latest}
+    environment: &api-env
+      ENV: prod
+      LOG_JSON: "true"
+      POSTGRES__HOST: postgres
+      POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      QDRANT__URL: http://qdrant:6333
+      REDIS__URL: redis://redis:6379/0
+      EMBEDDINGS__URL: http://embeddings:80
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY in .env}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
+      TRACING__CAPTURE_CONTENT: "false" # visitors' questions stay out of traces (GDPR)
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      embeddings: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    deploy: { resources: { limits: { memory: 2g } } }
+
+  # Runs the database migrations to completion before each start of the API.
+  migrate:
+    image: ghcr.io/zakariae92/rag-lexeu-api:${LEXEU_TAG:-latest}
+    command: ["alembic", "upgrade", "head"]
+    environment: *api-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  embeddings:
+    <<: *service
+    image: ghcr.io/zakariae92/rag-lexeu-embeddings:${LEXEU_TAG:-latest}
+    deploy: { resources: { limits: { memory: 3g } } }
+
+  qdrant:
+    <<: *service
+    image: qdrant/qdrant:v1.19.1
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ./snapshots:/qdrant/snapshots # index snapshots to restore (see docs/deploy.md)
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 2g } } }
+
+  postgres:
+    <<: *service
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: lexeu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lexeu
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lexeu -d lexeu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 1g } } }
+
+  redis:
+    <<: *service
+    image: redis:8.8.3
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 768m } } }
+
+volumes:
+  caddy_data:
+  caddy_config:
+  qdrant_data:
+  postgres_data:
+  redis_data:
