@@ -16,7 +16,9 @@ use_system_trust()
 @pytest.fixture
 def settings() -> Settings:
     # Ignore any developer .env so tests are hermetic.
-    return Settings(_env_file=None, env="ci", probe_timeout_s=0.2)
+    settings = Settings(_env_file=None, env="ci", probe_timeout_s=0.2)
+    settings.tracing.enabled = False  # tracing tests install an in-memory exporter themselves
+    return settings
 
 
 @pytest.fixture

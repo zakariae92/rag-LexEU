@@ -13,12 +13,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 import structlog
+from opentelemetry import context as otel_context
+from opentelemetry import trace
 from pydantic import ValidationError
 
 from lexeu.generation.grounding import check_grounding
 from lexeu.generation.llm import Completion, LlmClient
 from lexeu.generation.prompt import PROMPT_VERSION, LlmAnswer, build_messages
 from lexeu.generation.streaming import JsonFieldStream
+from lexeu.observability import spans
 from lexeu.retrieval.search import Hit, Retriever
 from lexeu.retrieval.sparse import detect_lang
 
@@ -95,13 +98,21 @@ class Answerer:
         self._expand_chars = expand_chars  # 0 = give the model the retrieved parts only
 
     async def answer(self, question: str, lang: str | None = None) -> Answer:
-        lang, hits, t_retrieval = await self._retrieve(question, lang)
-        if not hits:
-            return self._refuse(
-                question, lang, "no_sources", hits, None, {"retrieval": t_retrieval}
-            )
-        completion = await self._llm.complete(build_messages(question, hits, lang), LlmAnswer)
-        return self._finish(question, lang, hits, completion, t_retrieval)
+        with spans.tracer.start_as_current_span("answer") as root:
+            spans.start_answer(root, question, lang)
+            lang, hits, t_retrieval = await self._retrieve(question, lang)
+            if not hits:
+                answer = self._refuse(
+                    question, lang, "no_sources", hits, None, {"retrieval": t_retrieval}
+                )
+            else:
+                messages = build_messages(question, hits, lang)
+                with spans.tracer.start_as_current_span("llm.generate") as gen:
+                    completion = await self._llm.complete(messages, LlmAnswer)
+                    spans.generation(gen, self._llm.model_id, messages, completion)
+                answer = self._finish(question, lang, hits, completion, t_retrieval)
+            spans.finish_answer(root, answer)
+            return answer
 
     async def stream(self, question: str, lang: str | None = None) -> AsyncIterator[StreamEvent]:
         """`Sources` right after retrieval, `Delta`s while the model writes, then the `Answer`.
@@ -109,28 +120,58 @@ class Answerer:
         The final Answer is authoritative: the grounding check runs on the complete text, so a
         streamed draft can still end as a refusal (clients replace the draft with it).
         """
-        lang, hits, t_retrieval = await self._retrieve(question, lang)
-        yield Sources(hits)
-        if not hits:
-            yield self._refuse(question, lang, "no_sources", hits, None, {"retrieval": t_retrieval})
-            return
-        field = JsonFieldStream("answer")
-        completion: Completion | None = None
-        async for part in self._llm.stream(build_messages(question, hits, lang), LlmAnswer):
-            if isinstance(part, Completion):
-                completion = part
-            elif text := field.feed(part):
-                yield Delta(text)
-        if completion is None:  # a client that ends its stream without usage breaks the contract
-            raise RuntimeError("LLM stream ended without a final completion")
-        yield self._finish(question, lang, hits, completion, t_retrieval)
+        # Spans are passed explicitly, never made "current" across a `yield`: the consumer runs
+        # between yields and would otherwise inherit (and corrupt) this generator's context.
+        root = spans.tracer.start_span("answer")
+        root_ctx = trace.set_span_in_context(root)
+        spans.start_answer(root, question, lang)
+        try:
+            token = otel_context.attach(root_ctx)
+            try:
+                lang, hits, t_retrieval = await self._retrieve(question, lang)
+            finally:
+                otel_context.detach(token)
+            yield Sources(hits)
+            if not hits:
+                answer = self._refuse(
+                    question, lang, "no_sources", hits, None, {"retrieval": t_retrieval}
+                )
+                spans.finish_answer(root, answer)
+                yield answer
+                return
+            field = JsonFieldStream("answer")
+            completion: Completion | None = None
+            messages = build_messages(question, hits, lang)
+            gen = spans.tracer.start_span("llm.generate", context=root_ctx)
+            try:
+                async for part in self._llm.stream(messages, LlmAnswer):
+                    if isinstance(part, Completion):
+                        completion = part
+                    elif text := field.feed(part):
+                        yield Delta(text)
+                if completion is None:  # a client ending its stream without usage breaks it
+                    raise RuntimeError("LLM stream ended without a final completion")
+                spans.generation(gen, self._llm.model_id, messages, completion)
+            finally:
+                gen.end()
+            answer = self._finish(question, lang, hits, completion, t_retrieval)
+            spans.finish_answer(root, answer)
+            yield answer
+        except BaseException as exc:  # includes a client disconnect (GeneratorExit)
+            root.record_exception(exc)
+            root.set_status(trace.Status(trace.StatusCode.ERROR, type(exc).__name__))
+            raise
+        finally:
+            root.end()
 
     async def _retrieve(self, question: str, lang: str | None) -> tuple[str, list[Hit], float]:
         start = time.perf_counter()
-        lang = lang or detect_lang(question)
-        hits = await self._retriever.search(question, k=self._k)
-        if self._expand_chars:
-            hits = await self._retriever.expand(hits, max_chars=self._expand_chars)
+        with spans.tracer.start_as_current_span("retrieval") as span:
+            lang = lang or detect_lang(question)
+            hits = await self._retriever.search(question, k=self._k)
+            if self._expand_chars:
+                hits = await self._retriever.expand(hits, max_chars=self._expand_chars)
+            spans.retrieval(span, hits, self._k, bool(self._expand_chars))
         return lang, hits, round((time.perf_counter() - start) * 1000, 1)
 
     def _finish(

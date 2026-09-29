@@ -25,6 +25,7 @@ from lexeu.infra.api_keys import ApiKeyStore
 from lexeu.infra.db import SqlIndexRegistry
 from lexeu.infra.rate_limit import RateLimiter
 from lexeu.infra.resources import Resources
+from lexeu.observability.tracing import setup_tracing
 from lexeu.retrieval.embeddings import TeiEmbedder
 from lexeu.retrieval.search import Retriever
 from lexeu.retrieval.sparse import detect_lang
@@ -53,6 +54,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await embedder.aclose()
             await resources.close()
+            if app.state.tracer_provider is not None:
+                app.state.tracer_provider.shutdown()  # flush the last spans
             log.info("shutdown")
 
     app = FastAPI(
@@ -62,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.tracer_provider = setup_tracing(app, settings)
     app.add_middleware(RequestContextMiddleware)
     app.include_router(health.router)
     app.include_router(ask.router)

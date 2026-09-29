@@ -104,6 +104,17 @@ class CacheSettings(BaseModel):
     ttl_s: int = 7 * 24 * 3600  # the law changes slowly; a new index changes the namespace anyway
 
 
+class TracingSettings(BaseModel):
+    enabled: bool = True
+    service_name: str = "rag-lexeu-api"
+    otlp_endpoint: str | None = None  # e.g. Jaeger: http://127.0.0.1:4318/v1/traces (profile `obs`)
+    sample_ratio: float = 1.0  # keep every trace at this volume; lower it under real traffic
+    capture_content: bool = True  # questions, prompts and answers in spans (see tracing.py)
+    langfuse_host: str = "https://cloud.langfuse.com"  # EU region
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: SecretStr | None = None
+
+
 class EvalSettings(BaseModel):
     golden_path: str = "eval/golden/golden_v1.yaml"
     experiments_path: str = "eval/experiments.yaml"
@@ -138,6 +149,7 @@ class Settings(BaseSettings):
     generation: GenerationSettings = GenerationSettings()
     auth: AuthSettings = AuthSettings()
     cache: CacheSettings = CacheSettings()
+    tracing: TracingSettings = TracingSettings()
     eval: EvalSettings = EvalSettings()
 
 
