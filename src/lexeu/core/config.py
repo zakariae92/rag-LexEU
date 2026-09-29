@@ -77,7 +77,9 @@ PRODUCTION_RETRIEVAL = RetrievalConfig(
 class GenerationSettings(BaseModel):
     """LLM calls go through LiteLLM: switching provider is one string (`gemini/`, `ollama/`)."""
 
-    model: str = "gemini/gemini-3.1-flash-lite"  # M4: cheapest tested model, p95 < 2 s
+    # M4 chose 3.1-flash-lite by ablation (cheapest, p95 < 2 s); 3.5-flash-lite has the same price
+    # and latency on a spot check, and its own free quota. The CI answer gate validates it.
+    model: str = "gemini/gemini-3.5-flash-lite"
     # A stronger model than the generator grades the answers. Flash, not Pro: the Pro free tier
     # allows about one judged run per day (ADR 0007).
     judge_model: str = "gemini/gemini-3.8-flash"
